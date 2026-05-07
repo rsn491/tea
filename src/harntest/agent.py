@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from abc import ABC, abstractmethod
 
 from harntest.docker import DockerRunConfig, run_in_docker
@@ -18,6 +19,10 @@ class AgentRunner(ABC):
 
 class ClaudeCodeRunner(AgentRunner):
     def prompt(self, text: str, *, timeout: int = 300) -> AgentRun:
+        env: dict[str, str] = {}
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        if api_key:
+            env["ANTHROPIC_API_KEY"] = api_key
         config = DockerRunConfig(
             image=_CLAUDE_IMAGE,
             command=[
@@ -25,6 +30,7 @@ class ClaudeCodeRunner(AgentRunner):
                 "npm install -g @anthropic-ai/claude-code --quiet 2>/dev/null"
                 f' && claude --print --output-format stream-json "{_esc(text)}"',
             ],
+            env=env,
             timeout=timeout,
         )
         result = run_in_docker(config)
@@ -36,6 +42,10 @@ class ClaudeCodeRunner(AgentRunner):
 
 class CodexRunner(AgentRunner):
     def prompt(self, text: str, *, timeout: int = 300) -> AgentRun:
+        env: dict[str, str] = {}
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if api_key:
+            env["OPENAI_API_KEY"] = api_key
         config = DockerRunConfig(
             image=_CODEX_IMAGE,
             command=[
@@ -43,6 +53,7 @@ class CodexRunner(AgentRunner):
                 "npm install -g @openai/codex --quiet 2>/dev/null"
                 f' && codex --approval-mode full-auto "{_esc(text)}"',
             ],
+            env=env,
             timeout=timeout,
         )
         result = run_in_docker(config)

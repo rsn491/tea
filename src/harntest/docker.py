@@ -9,6 +9,7 @@ import docker
 class DockerRunConfig:
     image: str
     command: list[str]
+    env: dict[str, str] = field(default_factory=dict)
     timeout: int = 300
 
 
@@ -24,6 +25,7 @@ def run_in_docker(config: DockerRunConfig) -> DockerRunResult:
     container = client.containers.run(
         config.image,
         config.command,
+        environment=config.env or None,
         detach=True,
         remove=False,
     )
