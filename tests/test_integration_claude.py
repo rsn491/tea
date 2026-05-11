@@ -16,11 +16,11 @@ from harntest.models import AgentRun
 
 @pytest.mark.integration
 @pytest.mark.skipif(
-    not os.environ.get("ANTHROPIC_API_KEY"),
-    reason="ANTHROPIC_API_KEY not set",
+    not os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"),
+    reason="CLAUDE_CODE_OAUTH_TOKEN not set",
 )
 def test_claude_code_hello_world():
-    run = Agent.ClaudeCode.prompt("Say hello world and nothing else.")
+    run = Agent.ClaudeCode.prompt("Say hello world and nothing else.").run()
 
     assert isinstance(run, AgentRun)
     assert isinstance(run.raw, str)

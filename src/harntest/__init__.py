@@ -1,12 +1,16 @@
-from harntest.agent import Agent, AgentRunner, ClaudeCodeRunner, CodexRunner
-from harntest.models import AgentRun, Step, ToolCall
+from harntest.agent import Agent, ClaudeCodeRunner, CodexRunner, RunBuilder, Sandbox
+from harntest.models import AgentRun, FileChange, FileDiff, SandboxResult, Step, ToolCall
 
 __all__ = [
     "Agent",
-    "AgentRunner",
     "ClaudeCodeRunner",
     "CodexRunner",
+    "RunBuilder",
+    "Sandbox",
     "AgentRun",
+    "FileChange",
+    "FileDiff",
+    "SandboxResult",
     "Step",
     "ToolCall",
 ]

@@ -4,11 +4,12 @@ import json
 
 from harntest.models import AgentRun, Step, ToolCall
 
-_SKILL_TOOL = "Bash"
-
-
 def _skill_from_tool(tc: ToolCall) -> str | None:
-    if tc.name == _SKILL_TOOL:
+    if tc.name == "Skill":
+        skill = tc.input.get("skill")
+        if isinstance(skill, str) and skill:
+            return skill
+    if tc.name == "Bash":
         cmd = tc.input.get("command", "")
         if isinstance(cmd, str) and cmd.startswith("/"):
             return cmd.split()[0]
