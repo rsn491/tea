@@ -1,3 +1,5 @@
+"""Assertion helpers that integrate with harntest reporting."""
+
 from __future__ import annotations
 
 from harntest._context import _active_checks
@@ -16,6 +18,7 @@ def check(label: str, condition: bool) -> bool:
 
 
 def check_skill_used(run: AgentRun, skill: str, description: str | None = None) -> bool:
+    """Assert that a named skill appears in the run."""
     label = description or f"skill '{skill}' used"
     return check(label, skill in run.skills)
 
@@ -23,6 +26,7 @@ def check_skill_used(run: AgentRun, skill: str, description: str | None = None) 
 def check_diff_added(
     run: AgentRun, file: str, code: str, description: str | None = None
 ) -> bool:
+    """Assert that specific code was added to a file diff."""
     label = description or f"'{code}' added in {file}"
     change = run.files_changed.get(file)
     found = change is not None and code in change.diff.added

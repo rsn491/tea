@@ -1,3 +1,5 @@
+"""ASCII banner rendering for CLI startup."""
+
 from __future__ import annotations
 
 import os
@@ -23,6 +25,7 @@ def _bold_cyan(t: str) -> str:
 
 
 def print_banner() -> None:
+    """Print the harntest banner."""
     c = _cyan
     b = _bold_cyan
     d = _dim

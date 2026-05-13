@@ -1,3 +1,5 @@
+"""CLI entrypoint for running harntest."""
+
 from __future__ import annotations
 
 import argparse
@@ -8,6 +10,7 @@ from harntest.tui import print_banner
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Build command-line argument parser."""
     parser = argparse.ArgumentParser(
         prog="harntest",
         description="Run agentic CLI tests against Claude Code or Codex in Docker.",
@@ -26,6 +29,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> None:
+    """Run harntest from CLI arguments."""
     parser = build_parser()
     args = parser.parse_args(argv)
 

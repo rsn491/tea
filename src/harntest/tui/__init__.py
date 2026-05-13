@@ -1,3 +1,5 @@
+"""Terminal UI utilities for status, colors, and spinner rendering."""
+
 from __future__ import annotations
 
 import itertools
@@ -5,6 +7,8 @@ import os
 import re
 import sys
 import threading
+
+from .banner import print_banner
 
 # ── color helpers ──────────────────────────────────────────────────────────────
 
@@ -48,6 +52,8 @@ def _vlen(s: str) -> int:
 
 
 class _Spinner:
+    """Lightweight animated spinner for long-running operations."""
+
     _FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 
     def __init__(self, label: str) -> None:
@@ -87,7 +93,5 @@ def _row(symbol: str, name: str, value: str) -> str:
     pad = "." * max(1, _COL - _vlen(name))
     return f"     {symbol} {name}{pad}: {value}"
 
-
-from .banner import print_banner
 
 __all__ = ["print_banner"]

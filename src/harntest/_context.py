@@ -1,3 +1,5 @@
+"""Context variables used to collect runs and check outcomes."""
+
 from __future__ import annotations
 
 import contextvars

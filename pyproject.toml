@@ -37,16 +37,6 @@ markers = [
 [tool.pylint.main]
 persistent = false
 
-[tool.pylint.messages_control]
-disable = [
-    "missing-module-docstring",
-    "missing-class-docstring",
-    "missing-function-docstring",
-    "too-few-public-methods",
-    "protected-access",
-    "broad-exception-caught",
-    "redefined-outer-name",
-    "too-many-instance-attributes",
-    "import-outside-toplevel",
-    "wrong-import-position",
-]
+[tool.pylint.design]
+min-public-methods = 1
+max-attributes = 8

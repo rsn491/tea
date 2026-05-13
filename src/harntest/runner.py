@@ -1,3 +1,5 @@
+"""Test discovery and execution loop for harntest."""
+
 from __future__ import annotations
 
 import importlib.util
@@ -14,12 +16,14 @@ from harntest.tui.runner_view import print_test_header, print_test_results
 
 
 def discover_test_files(path: Path) -> list[Path]:
+    """Return test files for a file or directory target."""
     if path.is_file():
         return [path]
     return sorted(path.rglob("test_*.py"))
 
 
 def load_module(path: Path) -> ModuleType:
+    """Dynamically import a Python module from a file path."""
     parent = str(path.parent.resolve())
     if parent not in sys.path:
         sys.path.insert(0, parent)
@@ -30,6 +34,7 @@ def load_module(path: Path) -> ModuleType:
 
 
 def collect_fns(module: ModuleType) -> list[Callable]:
+    """Collect top-level callables named like tests."""
     return [
         obj
         for name, obj in vars(module).items()
@@ -38,6 +43,7 @@ def collect_fns(module: ModuleType) -> list[Callable]:
 
 
 def run(target: str, default_iterations: int = 1) -> None:
+    """Run tests from one target path or specific test function."""
     if "::" in target:
         file_part, fn_name = target.split("::", 1)
         path = Path(file_part)
@@ -64,25 +70,29 @@ def run(target: str, default_iterations: int = 1) -> None:
         if file_path != last_file:
             print(f"  {_cyan('──')} {_dim(str(file_path))}")
             last_file = file_path
-        n = getattr(fn, "_harntest_iterations", default_iterations)
-        TestRunner(iterations=n).run(fn)
+        n = getattr(fn, "harntest_iterations", default_iterations)
+        TestRunner(iterations_count=n).run(fn)
 
 
 def iterations(n: int) -> Callable:
     """Decorator to set the default iteration count for a test function."""
 
     def decorator(fn: Callable) -> Callable:
-        fn._harntest_iterations = n
+        setattr(fn, "harntest_iterations", n)
         return fn
 
     return decorator
 
 
 class TestRunner:
-    def __init__(self, iterations: int = 1) -> None:
-        self._iterations = iterations
+    """Execute one test callable for one or more iterations."""
+
+    def __init__(self, iterations_count: int = 1) -> None:
+        """Create a test runner."""
+        self._iterations = iterations_count
 
     def run(self, test_fn: Callable[[], None]) -> None:
+        """Run one test callable and print aggregated results."""
         name = getattr(test_fn, "__name__", repr(test_fn))
         print_test_header(name, self._iterations)
 
@@ -99,7 +109,7 @@ class TestRunner:
             with _Spinner(spin_label):
                 try:
                     test_fn()
-                except Exception as e:
+                except (AssertionError, RuntimeError, ValueError, TypeError) as e:
                     run_errors.append(e)
                 finally:
                     _active_collector.reset(c_token)

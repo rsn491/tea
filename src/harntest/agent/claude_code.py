@@ -1,9 +1,12 @@
+"""Claude Code runner implementation backed by Docker."""
+
 from __future__ import annotations
 
 import json
 import os
 
 from harntest.infra import DockerRunConfig, run_in_docker
+from .run_builder import RunBuilder
 from .agent_runner import AgentRunner
 from .agent_run import AgentRun, Step, ToolCall
 
@@ -13,12 +16,14 @@ _DEFAULT_MAX_TURNS = 25
 
 
 class ClaudeCodeRunner(AgentRunner):
-    def prompt(self, text: str, *, timeout: int = 300) -> "RunBuilder":
-        from .run_builder import RunBuilder
+    """Runs prompts through the Claude Code CLI in a container."""
 
+    def prompt(self, text: str, *, timeout: int = 300) -> "RunBuilder":
+        """Create a configurable run builder for one prompt."""
         return RunBuilder.prompt(self, text, timeout=timeout)
 
     def _execute(self, text: str, *, timeout: int, workdir: str | None) -> AgentRun:
+        """Execute Claude Code and parse its stream-json output."""
         env: dict[str, str] = {}
         api_key = os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")
         if api_key:
@@ -60,6 +65,7 @@ class ClaudeCodeRunner(AgentRunner):
 
     @staticmethod
     def _skill_from_tool(tc: ToolCall) -> str | None:
+        """Extract skill names from tool calls when available."""
         if tc.name == "Skill":
             skill = tc.input.get("skill")
             if isinstance(skill, str) and skill:
@@ -72,6 +78,7 @@ class ClaudeCodeRunner(AgentRunner):
 
     @staticmethod
     def _parse(stdout: str) -> AgentRun:
+        """Parse Claude stream-json output into an AgentRun."""
         steps: list[Step] = []
         tools: list[ToolCall] = []
         skills: list[str] = []
@@ -125,6 +132,7 @@ class ClaudeCodeRunner(AgentRunner):
 
 
 def _esc(text: str) -> str:
+    """Escape shell-sensitive characters for a double-quoted argument."""
     return (
         text.replace("\\", "\\\\")
         .replace('"', '\\"')

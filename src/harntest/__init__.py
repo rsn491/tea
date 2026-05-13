@@ -1,3 +1,5 @@
+"""Public package exports for harntest."""
+
 from harntest.agent import Agent, ClaudeCodeRunner, RunBuilder
 from harntest.agent.agent_run import AgentRun, FileChange, FileDiff, Step, ToolCall
 from harntest.checkers import check, check_diff_added, check_skill_used

@@ -1,3 +1,5 @@
+"""Thin Docker execution wrapper used by runner backends."""
+
 from __future__ import annotations
 
 import time
@@ -8,6 +10,8 @@ import docker
 
 @dataclass
 class DockerRunConfig:
+    """Container launch parameters for one run."""
+
     image: str
     command: list[str]
     env: dict[str, str] = field(default_factory=dict)
@@ -19,6 +23,8 @@ class DockerRunConfig:
 
 @dataclass
 class DockerRunResult:
+    """Normalized outputs from one container run."""
+
     stdout: str
     stderr: str
     exit_code: int
@@ -26,6 +32,7 @@ class DockerRunResult:
 
 
 def run_in_docker(config: DockerRunConfig) -> DockerRunResult:
+    """Run one command in Docker and capture outputs."""
     client = docker.from_env()
     volume_binds = {
         host: {"bind": ctr, "mode": "rw"} for host, ctr in config.volumes.items()

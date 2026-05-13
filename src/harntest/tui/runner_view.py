@@ -1,3 +1,5 @@
+"""Terminal rendering helpers for test run summaries."""
+
 from __future__ import annotations
 
 import statistics
@@ -8,6 +10,7 @@ from harntest.tui import _FAIL, _PASS, _bold_cyan, _c, _dim, _green, _red, _row
 
 
 def print_test_header(name: str, iterations: int) -> None:
+    """Print test header with test name and iteration count."""
     print(f"\n  {_bold_cyan(name)}  {_dim(f'[{iterations} iteration(s)]')}\n")
 
 
@@ -17,6 +20,7 @@ def print_test_results(
     run_errors: list[Exception],
     iterations: int,
 ) -> None:
+    """Print checks, aggregate metrics, and collected run errors."""
     for check_label, results in check_results.items():
         passes = sum(results)
         total = len(results)

@@ -1,3 +1,5 @@
+"""Builder API for executing an agent prompt in an isolated workspace."""
+
 from __future__ import annotations
 
 import difflib
@@ -12,10 +14,13 @@ from .agent_runner import AgentRunner
 
 
 class RunBuilder:
+    """Fluent builder for configuring and running one agent prompt."""
+
     @classmethod
     def prompt(
         cls, runner: AgentRunner, text: str, *, timeout: int = 300
     ) -> RunBuilder:
+        """Create a new prompt builder."""
         return cls(runner, text, timeout)
 
     def __init__(self, runner: AgentRunner, text: str, timeout: int) -> None:
@@ -25,10 +30,12 @@ class RunBuilder:
         self._workdir: str | None = None
 
     def workdir(self, path: str) -> RunBuilder:
+        """Run the prompt against a copied working directory."""
         self._workdir = os.path.abspath(path)
         return self
 
     def run(self) -> AgentRun:
+        """Execute and return the parsed run result."""
         tmp_dir: str | None = None
         if self._workdir:
             tmp_dir = tempfile.mkdtemp()
@@ -36,11 +43,11 @@ class RunBuilder:
         effective_workdir = tmp_dir if tmp_dir else self._workdir
         try:
             before = _snapshot(self._workdir)
-            result = self._runner._execute(
+            result = self._runner.execute(
                 self._text, timeout=self._timeout, workdir=effective_workdir
             )
             after = _snapshot(effective_workdir)
-            result._files_changed_fn = lambda: _diff_snapshots(before, after)
+            result.set_files_changed_resolver(lambda: _diff_snapshots(before, after))
         finally:
             if tmp_dir:
                 shutil.rmtree(tmp_dir, ignore_errors=True)
@@ -57,6 +64,7 @@ class RunBuilder:
 
 
 def _snapshot(path: str | None) -> dict[str, str]:
+    """Return a text snapshot of all non-hidden files under a path."""
     if not path:
         return {}
     snapshot: dict[str, str] = {}
@@ -76,6 +84,7 @@ def _snapshot(path: str | None) -> dict[str, str]:
 def _diff_snapshots(
     before: dict[str, str], after: dict[str, str]
 ) -> dict[str, FileChange]:
+    """Compute per-file added and removed lines between snapshots."""
     changes: dict[str, FileChange] = {}
     for fname in set(before) | set(after):
         old, new = before.get(fname, ""), after.get(fname, "")
