@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "harntest"
+version = "0.1.0"
+description = "Testing tool for agentic CLI tools (Claude Code, Codex) in Docker"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+dependencies = [
+    "docker>=7.0",
+]
+
+[project.scripts]
+harntest = "harntest.main:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "black>=24.0",
+    "pylint>=3.0",
+    "pre-commit>=3.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests/unit", "tests/integration"]
+markers = [
+    "integration: marks tests that require a running Docker daemon and valid API keys (deselect with '-m not integration')",
+]
+
+[tool.pylint.main]
+persistent = false
+
+[tool.pylint.messages_control]
+disable = [
+    "missing-module-docstring",
+    "missing-class-docstring",
+    "missing-function-docstring",
+    "too-few-public-methods",
+    "protected-access",
+    "broad-exception-caught",
+    "redefined-outer-name",
+    "too-many-instance-attributes",
+    "import-outside-toplevel",
+    "wrong-import-position",
+]
