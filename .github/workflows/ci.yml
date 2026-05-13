@@ -1,4 +1,4 @@
-name: CI
+name: precommit
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
   pull_request:
 
 jobs:
-  test:
+  precommit:
     runs-on: ubuntu-latest
 
     steps:
@@ -27,6 +27,3 @@ jobs:
 
       - name: Run pre-commit
         run: pre-commit run --all-files
-
-      - name: Run unit tests
-        run: pytest tests/unit -q
