@@ -55,3 +55,20 @@ harntest examples/demo_calculator/agent-tests/test_add_new_operation.py::test_ad
 ```bash
 pip install -e .
 ```
+
+
+## Development
+
+Install dev dependencies and enable git pre-commit hooks:
+
+```bash
+pip install -r requirements-dev.txt
+pre-commit install
+```
+
+Run checks manually:
+
+```bash
+pre-commit run --all-files
+pytest tests/unit -q
+```
