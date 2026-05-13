@@ -1,5 +1,5 @@
 # harntest
-Testing tool for agentic CLIs. `harntest` runs agent-driven test functions in Docker and reports assertion pass rates plus run metrics across iterations.
+Test and evaluation tool for agentic workflows. `harntest` helps benchmark how context and tools impact agent performance on your tasks.
 
 ![Demo output](docs/demo_output.png)
 
