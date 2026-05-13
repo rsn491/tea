@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock, patch
 import pytest
-from harntest.docker import DockerRunConfig, DockerRunResult, run_in_docker
+from harntest.infra import DockerRunConfig, DockerRunResult, run_in_docker
 
 
 def _make_container(stdout=b"out", stderr=b"err", exit_code=0):
@@ -12,7 +12,7 @@ def _make_container(stdout=b"out", stderr=b"err", exit_code=0):
     return container
 
 
-@patch("harntest.docker.docker")
+@patch("harntest.infra.docker.docker")
 def test_run_in_docker_returns_result(mock_docker_module):
     container = _make_container()
     mock_docker_module.from_env.return_value.containers.run.return_value = container
@@ -26,7 +26,7 @@ def test_run_in_docker_returns_result(mock_docker_module):
     assert result.stderr == "err"
 
 
-@patch("harntest.docker.docker")
+@patch("harntest.infra.docker.docker")
 def test_run_in_docker_uses_detach_and_no_remove(mock_docker_module):
     container = _make_container()
     mock_docker_module.from_env.return_value.containers.run.return_value = container
@@ -39,7 +39,7 @@ def test_run_in_docker_uses_detach_and_no_remove(mock_docker_module):
     assert call_kwargs.kwargs.get("remove") is False
 
 
-@patch("harntest.docker.docker")
+@patch("harntest.infra.docker.docker")
 def test_container_removed_after_run(mock_docker_module):
     container = _make_container()
     mock_docker_module.from_env.return_value.containers.run.return_value = container
@@ -50,7 +50,7 @@ def test_container_removed_after_run(mock_docker_module):
     container.remove.assert_called_once_with(force=True)
 
 
-@patch("harntest.docker.docker")
+@patch("harntest.infra.docker.docker")
 def test_container_removed_on_timeout(mock_docker_module):
     container = MagicMock()
     container.wait.side_effect = Exception("timeout")

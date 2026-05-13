@@ -27,7 +27,9 @@ class DockerRunResult:
 
 def run_in_docker(config: DockerRunConfig) -> DockerRunResult:
     client = docker.from_env()
-    volume_binds = {host: {"bind": ctr, "mode": "rw"} for host, ctr in config.volumes.items()}
+    volume_binds = {
+        host: {"bind": ctr, "mode": "rw"} for host, ctr in config.volumes.items()
+    }
     t0 = time.monotonic()
     container = client.containers.run(
         config.image,
@@ -42,9 +44,15 @@ def run_in_docker(config: DockerRunConfig) -> DockerRunResult:
     try:
         exit_code = container.wait(timeout=config.timeout)["StatusCode"]
         duration_s = time.monotonic() - t0
-        stdout = container.logs(stdout=True, stderr=False).decode("utf-8", errors="replace")
-        stderr = container.logs(stdout=False, stderr=True).decode("utf-8", errors="replace")
+        stdout = container.logs(stdout=True, stderr=False).decode(
+            "utf-8", errors="replace"
+        )
+        stderr = container.logs(stdout=False, stderr=True).decode(
+            "utf-8", errors="replace"
+        )
     finally:
         container.remove(force=True)
 
-    return DockerRunResult(stdout=stdout, stderr=stderr, exit_code=exit_code, duration_s=duration_s)
+    return DockerRunResult(
+        stdout=stdout, stderr=stderr, exit_code=exit_code, duration_s=duration_s
+    )
