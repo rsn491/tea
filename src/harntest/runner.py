@@ -9,7 +9,7 @@ from typing import Callable
 
 from harntest._context import _active_checks, _active_collector
 from harntest.agent.agent_run import AgentRun
-from harntest.tui import _Spinner, _cyan, _dim
+from harntest.tui import _cyan, _dim, _Spinner
 from harntest.tui.runner_view import print_test_header, print_test_results
 
 

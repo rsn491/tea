@@ -9,8 +9,9 @@ Run with:
 """
 
 import os
-import pytest
+
 import docker
+import pytest
 
 from harntest import Agent
 from harntest.agent.agent_run import AgentRun
@@ -50,6 +51,6 @@ def test_claude_code_hello_world():
     assert "hello" in combined, f"expected 'hello' in output, got: {combined!r}"
 
     # exit_code 0 means the CLI succeeded
-    assert (
-        run.exit_code == 0
-    ), f"non-zero exit code: {run.exit_code}\nstderr: {run.stderr}"
+    assert run.exit_code == 0, (
+        f"non-zero exit code: {run.exit_code}\nstderr: {run.stderr}"
+    )

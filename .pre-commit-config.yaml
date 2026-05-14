@@ -1,20 +1,15 @@
 repos:
-  - repo: https://github.com/psf/black
-    rev: 24.10.0
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.12
     hooks:
-      - id: black
-        files: ^(src/|tests/unit/).+\.py$
+      - id: ruff-check
+        args: [--fix]
+        files: ^(src/|tests/|examples/).+\.py$
+      - id: ruff-format
+        files: ^(src/|tests/|examples/).+\.py$
 
   - repo: local
     hooks:
-      - id: pylint
-        name: pylint
-        entry: pylint
-        language: system
-        types: [python]
-        args: [--persistent=n, src/harntest/]
-        pass_filenames: false
-
       - id: pytest
         name: pytest
         entry: pytest

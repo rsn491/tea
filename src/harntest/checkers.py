@@ -5,7 +5,10 @@ from harntest.agent.agent_run import AgentRun
 
 
 def check(label: str, condition: bool) -> bool:
-    """Named assertion. Inside TestRunner it records pass/fail; outside it raises on failure."""
+    """Named assertion.
+
+    Inside TestRunner it records pass/fail; outside it raises on failure.
+    """
     checks = _active_checks.get(None)
     if checks is not None:
         checks.append((label, bool(condition)))

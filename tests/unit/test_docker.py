@@ -1,5 +1,7 @@
 from unittest.mock import MagicMock, patch
+
 import pytest
+
 from harntest.infra import DockerRunConfig, DockerRunResult, run_in_docker
 
 
