@@ -4,9 +4,9 @@ repos:
     hooks:
       - id: ruff-check
         args: [--fix]
-        files: ^(src/|tests/unit/).+\.py$
+        files: ^(src/|tests/|examples/).+\.py$
       - id: ruff-format
-        files: ^(src/|tests/unit/).+\.py$
+        files: ^(src/|tests/|examples/).+\.py$
 
   - repo: local
     hooks:
