@@ -88,6 +88,6 @@ def _row(symbol: str, name: str, value: str) -> str:
     return f"     {symbol} {name}{pad}: {value}"
 
 
-from .banner import print_banner
+from .banner import print_banner  # noqa: E402
 
 __all__ = ["print_banner"]

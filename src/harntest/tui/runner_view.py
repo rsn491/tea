@@ -27,7 +27,8 @@ def print_test_results(
             _row(
                 sym,
                 check_label,
-                f"{pct_str}  {_green(str(passes))} passed  {_red(str(total - passes))} failed",
+                f"{pct_str}  {_green(str(passes))} passed"
+                f"  {_red(str(total - passes))} failed",
             )
         )
 
@@ -62,7 +63,8 @@ def print_test_results(
 
     if run_errors:
         print(
-            f"\n  {_FAIL} {_red(f'{len(run_errors)} iteration(s) raised an exception:')}"
+            f"\n  {_FAIL} "
+            + _red(f"{len(run_errors)} iteration(s) raised an exception:")
         )
         seen: set[str] = set()
         for e in run_errors:
