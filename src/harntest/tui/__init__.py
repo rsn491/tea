@@ -6,6 +6,8 @@ import re
 import sys
 import threading
 
+from .banner import print_banner
+
 # ── color helpers ──────────────────────────────────────────────────────────────
 
 _TTY = sys.stdout.isatty() and os.environ.get("NO_COLOR") is None
@@ -87,7 +89,5 @@ def _row(symbol: str, name: str, value: str) -> str:
     pad = "." * max(1, _COL - _vlen(name))
     return f"     {symbol} {name}{pad}: {value}"
 
-
-from .banner import print_banner  # noqa: E402
 
 __all__ = ["print_banner"]
