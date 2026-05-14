@@ -2,15 +2,12 @@ from __future__ import annotations
 
 import json
 import os
-from typing import TYPE_CHECKING
 
 from harntest.infra import DockerRunConfig, run_in_docker
 
 from .agent_run import AgentRun, Step, ToolCall
 from .agent_runner import AgentRunner
-
-if TYPE_CHECKING:
-    from .run_builder import RunBuilder
+from .run_builder import RunBuilder
 
 _CLAUDE_IMAGE = "node:22"
 _CONTAINER_WORKDIR = "/workspace"
@@ -19,8 +16,6 @@ _DEFAULT_MAX_TURNS = 25
 
 class ClaudeCodeRunner(AgentRunner):
     def prompt(self, text: str, *, timeout: int = 300) -> RunBuilder:
-        from .run_builder import RunBuilder
-
         return RunBuilder.prompt(self, text, timeout=timeout)
 
     def _execute(self, text: str, *, timeout: int, workdir: str | None) -> AgentRun:
