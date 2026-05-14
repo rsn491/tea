@@ -8,18 +8,18 @@ from .agent import Agent
 from .agent_run import AgentRun, Step, ToolCall
 
 _CLAUDE_IMAGE = "node:22"
-_NPM_PREFIX = "/home/node/.npm-global"
 _DEFAULT_MAX_TURNS = 25
 
 
 class ClaudeCode(Agent):
     def build_spec(self, prompt: str, timeout: int) -> DockerSpec:
-        env: dict[str, str] = {"HOME": "/home/node", "NPM_CONFIG_PREFIX": _NPM_PREFIX}
+        npm_prefix = "/home/node/.npm-global"
+        env: dict[str, str] = {"HOME": "/home/node", "NPM_CONFIG_PREFIX": npm_prefix}
         if token := os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"):
             env["CLAUDE_CODE_OAUTH_TOKEN"] = token
         return DockerSpec(
             command=(
-                f"{_NPM_PREFIX}/bin/claude --dangerously-skip-permissions"
+                f"{npm_prefix}/bin/claude --dangerously-skip-permissions"
                 f" --model claude-haiku-4-5-20251001 --max-turns {_DEFAULT_MAX_TURNS}"
                 f' --print --output-format stream-json --verbose "{_esc(prompt)}"'
             ),
