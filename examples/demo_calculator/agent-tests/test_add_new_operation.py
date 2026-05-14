@@ -1,9 +1,9 @@
-from harntest import Agent, check_diff_added, check_skill_used
+from harntest import Agents, check_diff_added, check_skill_used
 
 
 def test_add_minus_operation():
     run = (
-        Agent.ClaudeCode.prompt("Add 'minus' operation support to the calculator")
+        Agents.ClaudeCode.prompt("Add 'minus' operation support to the calculator")
         .workdir("examples/demo_calculator")
         .run()
     )
@@ -16,7 +16,7 @@ def test_add_minus_operation():
 
 def test_add_multiply_operation():
     run = (
-        Agent.ClaudeCode.prompt("Add 'multiply' operation support to the calculator")
+        Agents.ClaudeCode.prompt("Add 'multiply' operation support to the calculator")
         .workdir("examples/demo_calculator")
         .run()
     )

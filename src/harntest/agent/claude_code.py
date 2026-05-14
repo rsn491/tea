@@ -3,59 +3,41 @@ from __future__ import annotations
 import json
 import os
 
-from harntest.infra import DockerRunConfig, run_in_docker
+from harntest.executor import DockerSpec, RawResult
 
+from .agent import Agent
 from .agent_run import AgentRun, Step, ToolCall
-from .agent_runner import AgentRunner
-from .run_builder import RunBuilder
 
 _CLAUDE_IMAGE = "node:22"
-_CONTAINER_WORKDIR = "/workspace"
 _DEFAULT_MAX_TURNS = 25
 
 
-class ClaudeCodeRunner(AgentRunner):
-    def prompt(self, text: str, *, timeout: int = 300) -> RunBuilder:
-        return RunBuilder.prompt(self, text, timeout=timeout)
-
-    def _execute(self, text: str, *, timeout: int, workdir: str | None) -> AgentRun:
-        env: dict[str, str] = {}
-        api_key = os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")
-        if api_key:
-            env["CLAUDE_CODE_OAUTH_TOKEN"] = api_key
-
-        volumes: dict[str, str] = {}
-        container_cwd: str | None = None
-        if workdir:
-            volumes[workdir] = _CONTAINER_WORKDIR
-            container_cwd = _CONTAINER_WORKDIR
-
-        # Run as non-root: --dangerously-skip-permissions is blocked for root.
-        # node:22 ships a `node` user; install to a user-local npm prefix so
-        # root write access to /usr/local is not required.
-        _npm_prefix = "/home/node/.npm-global"
-        env["HOME"] = "/home/node"
-        env["NPM_CONFIG_PREFIX"] = _npm_prefix
-        run_cmd = (
-            f"npm install -g @anthropic-ai/claude-code --quiet 2>/dev/null"
-            f" && {_npm_prefix}/bin/claude --dangerously-skip-permissions"
-            f" --model claude-haiku-4-5-20251001 --max-turns {_DEFAULT_MAX_TURNS}"
-            f' --print --output-format stream-json --verbose "{_esc(text)}"'
-        )
-        config = DockerRunConfig(
-            image=_CLAUDE_IMAGE,
-            command=["sh", "-c", run_cmd],
+class ClaudeCode(Agent):
+    def build_spec(self, prompt: str, timeout: int) -> DockerSpec:
+        npm_prefix = "/home/node/.npm-global"
+        env: dict[str, str] = {"HOME": "/home/node", "NPM_CONFIG_PREFIX": npm_prefix}
+        if token := os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"):
+            env["CLAUDE_CODE_OAUTH_TOKEN"] = token
+        return DockerSpec(
+            command=(
+                f"{npm_prefix}/bin/claude --dangerously-skip-permissions"
+                f" --model claude-haiku-4-5-20251001 --max-turns {_DEFAULT_MAX_TURNS}"
+                f' --print --output-format stream-json --verbose "{_esc(prompt)}"'
+            ),
+            setup_command=(
+                "npm install -g @anthropic-ai/claude-code --quiet 2>/dev/null"
+            ),
             env=env,
-            timeout=timeout,
-            volumes=volumes,
-            container_workdir=container_cwd,
+            image=_CLAUDE_IMAGE,
             user="node",
+            timeout=timeout,
         )
-        result = run_in_docker(config)
-        run = self._parse(result.stdout)
-        run.exit_code = result.exit_code
-        run.stderr = result.stderr
-        run.duration_s = result.duration_s
+
+    def parse(self, raw: RawResult) -> AgentRun:
+        run = self._parse(raw.stdout)
+        run.exit_code = raw.exit_code
+        run.stderr = raw.stderr
+        run.duration_s = raw.duration_s
         return run
 
     @staticmethod
@@ -107,7 +89,7 @@ class ClaudeCodeRunner(AgentRunner):
                                 raw=block,
                             )
                         )
-                        skill = ClaudeCodeRunner._skill_from_tool(tc)
+                        skill = ClaudeCode._skill_from_tool(tc)
                         if skill and skill not in skills:
                             skills.append(skill)
 
