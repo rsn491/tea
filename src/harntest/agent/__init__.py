@@ -1,7 +1,9 @@
-from .agent_runner import AgentRunner
-from .claude_code import ClaudeCodeRunner
-from .run_builder import RunBuilder as RunBuilder
+from .agent import Agent
+from .claude_code import ClaudeCode, ClaudeCodeRunner
+from .harness import Harness
+from .run_builder import RunBuilder
+from harntest.executor.docker import DockerExecutor
 
 
-class Agent:
-    ClaudeCode: AgentRunner = ClaudeCodeRunner()
+class _AgentCatalog:
+    ClaudeCode: Harness = Harness(ClaudeCode(), DockerExecutor())

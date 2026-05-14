@@ -9,17 +9,17 @@ from harntest._context import _active_collector
 from harntest.tui.metrics import print_metrics
 
 from .agent_run import AgentRun, FileChange, FileDiff
-from .agent_runner import AgentRunner
+from .harness import Harness
 
 
 class RunBuilder:
     @classmethod
     def prompt(
-        cls, runner: AgentRunner, text: str, *, timeout: int = 300
+        cls, runner: Harness, text: str, *, timeout: int = 300
     ) -> RunBuilder:
         return cls(runner, text, timeout)
 
-    def __init__(self, runner: AgentRunner, text: str, timeout: int) -> None:
+    def __init__(self, runner: Harness, text: str, timeout: int) -> None:
         self._runner = runner
         self._text = text
         self._timeout = timeout

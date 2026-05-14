@@ -1,8 +1,8 @@
 import json
 
-from harntest.agent.claude_code import ClaudeCodeRunner
+from harntest.agent.claude_code import ClaudeCode
 
-parse = ClaudeCodeRunner._parse
+parse = ClaudeCode._parse
 
 INIT = {
     "type": "system",

@@ -7,7 +7,7 @@ from harntest.infra import DockerRunResult
 
 @pytest.fixture
 def mock_docker():
-    with patch("harntest.infra.run_in_docker") as mock:
+    with patch("harntest.executor.docker.run_in_docker") as mock:
         yield mock
 
 
