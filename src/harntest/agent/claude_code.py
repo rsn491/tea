@@ -103,10 +103,6 @@ class ClaudeCode(Agent):
         return AgentRun(raw=stdout, steps=steps, tools=tools, skills=skills)
 
 
-# backward-compat alias — removed after tests updated
-ClaudeCodeRunner = ClaudeCode
-
-
 def _esc(text: str) -> str:
     return (
         text.replace("\\", "\\\\")

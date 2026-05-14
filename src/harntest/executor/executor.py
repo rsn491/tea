@@ -19,6 +19,10 @@ class DockerSpec(ExecutionSpec):
     setup_command: str | None = None
     user: str | None = None
 
+    def __post_init__(self) -> None:
+        if not self.image:
+            raise ValueError("DockerSpec.image must be set")
+
 
 @dataclass
 class RawResult:

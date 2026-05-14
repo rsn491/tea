@@ -13,7 +13,7 @@ import os
 import docker
 import pytest
 
-from harntest import Agent
+from harntest import Agents
 from harntest.agent.agent_run import AgentRun
 
 
@@ -32,7 +32,7 @@ def _docker_available() -> bool:
     reason="CLAUDE_CODE_OAUTH_TOKEN not set or Docker not available",
 )
 def test_claude_code_hello_world():
-    run = Agent.ClaudeCode.prompt("Say hello world and nothing else.").run()
+    run = Agents.ClaudeCode.prompt("Say hello world and nothing else.").run()
 
     assert isinstance(run, AgentRun)
     assert isinstance(run.raw, str)
