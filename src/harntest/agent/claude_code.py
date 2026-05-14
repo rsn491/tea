@@ -4,6 +4,7 @@ import json
 import os
 
 from harntest.executor import DockerSpec, RawResult
+
 from .agent import Agent
 from .agent_run import AgentRun, Step, ToolCall
 
@@ -23,7 +24,9 @@ class ClaudeCode(Agent):
                 f" --model claude-haiku-4-5-20251001 --max-turns {_DEFAULT_MAX_TURNS}"
                 f' --print --output-format stream-json --verbose "{_esc(prompt)}"'
             ),
-            setup_command="npm install -g @anthropic-ai/claude-code --quiet 2>/dev/null",
+            setup_command=(
+                "npm install -g @anthropic-ai/claude-code --quiet 2>/dev/null"
+            ),
             env=env,
             image=_CLAUDE_IMAGE,
             user="node",

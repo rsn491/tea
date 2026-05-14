@@ -14,9 +14,7 @@ from .harness import Harness
 
 class RunBuilder:
     @classmethod
-    def prompt(
-        cls, runner: Harness, text: str, *, timeout: int = 300
-    ) -> RunBuilder:
+    def prompt(cls, runner: Harness, text: str, *, timeout: int = 300) -> RunBuilder:
         return cls(runner, text, timeout)
 
     def __init__(self, runner: Harness, text: str, timeout: int) -> None:

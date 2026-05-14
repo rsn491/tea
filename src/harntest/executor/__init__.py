@@ -1,3 +1,3 @@
-from .executor import Executor, ExecutionSpec, DockerSpec, RawResult
+from .executor import DockerSpec, ExecutionSpec, Executor, RawResult
 
 __all__ = ["Executor", "ExecutionSpec", "DockerSpec", "RawResult"]
