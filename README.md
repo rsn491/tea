@@ -62,7 +62,7 @@ pip install -e .
 Install dev dependencies and enable git pre-commit hooks:
 
 ```bash
-pip install -e ".[dev]"
+pip install -r requirements-dev.txt
 pre-commit install
 ```
 
