@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from collections.abc import Sequence
 
 from harntest.runner import run
@@ -34,4 +35,8 @@ def main(argv: Sequence[str] | None = None) -> None:
         return
 
     print_banner()
-    run(args.target, args.iterations)
+    try:
+        run(args.target, args.iterations)
+    except KeyboardInterrupt:
+        print("\nInterrupted.")
+        sys.exit(130)

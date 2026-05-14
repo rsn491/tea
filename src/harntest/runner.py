@@ -90,22 +90,27 @@ class TestRunner:
         check_results: dict[str, list[bool]] = defaultdict(list)
         run_errors: list[Exception] = []
 
-        for i in range(self._iterations):
-            collector: list[AgentRun] = []
-            checks: list[tuple[str, bool]] = []
-            c_token = _active_collector.set(collector)
-            ch_token = _active_checks.set(checks)
-            spin_label = f"iteration {i + 1}/{self._iterations}"
-            with _Spinner(spin_label):
-                try:
-                    test_fn()
-                except Exception as e:
-                    run_errors.append(e)
-                finally:
-                    _active_collector.reset(c_token)
-                    _active_checks.reset(ch_token)
-            all_runs.extend(collector)
-            for check_label, passed in checks:
-                check_results[check_label].append(passed)
+        try:
+            for i in range(self._iterations):
+                collector: list[AgentRun] = []
+                checks: list[tuple[str, bool]] = []
+                c_token = _active_collector.set(collector)
+                ch_token = _active_checks.set(checks)
+                spin_label = f"iteration {i + 1}/{self._iterations}"
+                with _Spinner(spin_label):
+                    try:
+                        test_fn()
+                    except Exception as e:
+                        run_errors.append(e)
+                    finally:
+                        _active_collector.reset(c_token)
+                        _active_checks.reset(ch_token)
+                all_runs.extend(collector)
+                for check_label, passed in checks:
+                    check_results[check_label].append(passed)
+        except KeyboardInterrupt:
+            if check_results or all_runs:
+                print_test_results(check_results, all_runs, run_errors, i)
+            raise
 
         print_test_results(check_results, all_runs, run_errors, self._iterations)
