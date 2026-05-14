@@ -53,7 +53,7 @@ harntest examples/demo_calculator/agent-tests/test_add_new_operation.py::test_ad
 ## Install
 
 ```bash
-pip install -e .
+uv pip install -e .
 ```
 
 
@@ -62,7 +62,7 @@ pip install -e .
 Install dev dependencies and enable git pre-commit hooks:
 
 ```bash
-pip install -r requirements-dev.txt
+uv pip install -e ".[dev]"
 pre-commit install
 ```
 
