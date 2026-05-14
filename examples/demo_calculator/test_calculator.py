@@ -4,14 +4,13 @@ Test suite for the calculator module.
 """
 
 import unittest
-from unittest.mock import patch
 from io import StringIO
+from unittest.mock import patch
 
-from calculator import sum_numbers, help, main
+from calculator import help, main, sum_numbers
 
 
 class TestCalculator(unittest.TestCase):
-
     def test_sum_numbers_basic(self):
         result = sum_numbers("1", "2", "3")
         self.assertEqual(result, 6.0)
@@ -43,7 +42,9 @@ class TestCalculator(unittest.TestCase):
     def test_sum_numbers_no_arguments(self):
         with self.assertRaises(ValueError) as context:
             sum_numbers()
-        self.assertEqual(str(context.exception), "At least one number is required for sum operation")
+        self.assertEqual(
+            str(context.exception), "At least one number is required for sum operation"
+        )
 
     def test_sum_numbers_invalid_input(self):
         with self.assertRaises(ValueError) as context:
@@ -54,7 +55,7 @@ class TestCalculator(unittest.TestCase):
         result = sum_numbers("1e3", "2e2")
         self.assertEqual(result, 1200.0)
 
-    @patch('sys.stdout', new_callable=StringIO)
+    @patch("sys.stdout", new_callable=StringIO)
     def test_help_function(self, mock_stdout):
         help()
         output = mock_stdout.getvalue()
@@ -63,43 +64,43 @@ class TestCalculator(unittest.TestCase):
         self.assertIn("EXAMPLES:", output)
 
     def test_main_help_command(self):
-        with patch('sys.argv', ['calculator.py', 'help']):
-            with patch('sys.stdout', new_callable=StringIO) as mock_stdout:
+        with patch("sys.argv", ["calculator.py", "help"]):
+            with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
                 main()
                 output = mock_stdout.getvalue()
                 self.assertIn("Calculator - A simple command-line calculator", output)
 
     def test_main_sum_command(self):
-        with patch('sys.argv', ['calculator.py', 'sum', '1', '2', '3']):
-            with patch('sys.stdout', new_callable=StringIO) as mock_stdout:
+        with patch("sys.argv", ["calculator.py", "sum", "1", "2", "3"]):
+            with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
                 main()
                 output = mock_stdout.getvalue()
                 self.assertEqual(output.strip(), "Result: 6.0")
 
     def test_main_no_arguments(self):
-        with patch('sys.argv', ['calculator.py']):
-            with patch('sys.stdout', new_callable=StringIO) as mock_stdout:
+        with patch("sys.argv", ["calculator.py"]):
+            with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
                 with self.assertRaises(SystemExit):
                     main()
                 output = mock_stdout.getvalue()
                 self.assertIn("Error: No operation specified.", output)
 
     def test_main_sum_no_numbers(self):
-        with patch('sys.argv', ['calculator.py', 'sum']):
-            with patch('sys.stdout', new_callable=StringIO) as mock_stdout:
+        with patch("sys.argv", ["calculator.py", "sum"]):
+            with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
                 with self.assertRaises(SystemExit):
                     main()
                 output = mock_stdout.getvalue()
                 self.assertIn("Error: At least one number is required", output)
 
     def test_main_unknown_operation(self):
-        with patch('sys.argv', ['calculator.py', 'unknown']):
-            with patch('sys.stdout', new_callable=StringIO) as mock_stdout:
+        with patch("sys.argv", ["calculator.py", "unknown"]):
+            with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
                 with self.assertRaises(SystemExit):
                     main()
                 output = mock_stdout.getvalue()
                 self.assertIn("Error: Unknown operation 'unknown'", output)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()
