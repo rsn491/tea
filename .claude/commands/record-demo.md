@@ -20,18 +20,20 @@ record it with asciinema, and convert it to a GIF.
    the demo. The script should:
    - Include any setup steps described in the spec (create files, activate venv, etc.)
    - Run the commands that show the feature working
-   - Use `sleep 1` between steps so the recording is readable
+   - Use `sleep 1` before running each command so the viewer can read the prompt
+   - Use `sleep 5` after commands that produce output worth reading (cat, short results)
+   - Use no extra sleep after long-running commands (the output itself provides pacing)
    - Print a blank line between sections for visual breathing room
    - Work from the repo root directory
 
-4. **Record** the script:
+4. **Record** the script with a wide terminal so output isn't truncated:
    ```
-   asciinema rec --overwrite -c "bash /tmp/harntest-demo-$ARGUMENTS.sh" docs/demos/$ARGUMENTS.cast
+   asciinema rec --overwrite --cols 220 --rows 50 -c "bash /tmp/harntest-demo-$ARGUMENTS.sh" docs/demos/$ARGUMENTS.cast
    ```
 
 5. **Convert** to GIF:
    ```
-   agg --font-size 14 docs/demos/$ARGUMENTS.cast docs/demos/$ARGUMENTS.gif
+   agg --font-size 14 --cols 220 docs/demos/$ARGUMENTS.cast docs/demos/$ARGUMENTS.gif
    ```
 
 6. **Output** the ready-to-paste markdown snippet:
