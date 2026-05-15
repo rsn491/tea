@@ -121,10 +121,34 @@ def test_diff_returns_empty_string_for_unknown_file():
 
 def test_default_judge_raises_without_model_env_var(monkeypatch):
     monkeypatch.delenv("HARNTEST_JUDGE_MODEL", raising=False)
+    monkeypatch.delenv("HARNTEST_JUDGE_BASE_URL", raising=False)
+    monkeypatch.delenv("HARNTEST_JUDGE_API_KEY", raising=False)
 
     from harntest.judge.pydantic_ai import default_judge
 
     with pytest.raises(EnvironmentError, match="HARNTEST_JUDGE_MODEL"):
+        default_judge()
+
+
+def test_default_judge_raises_with_base_url_but_no_api_key(monkeypatch):
+    monkeypatch.setenv("HARNTEST_JUDGE_MODEL", "llama3.2")
+    monkeypatch.setenv("HARNTEST_JUDGE_BASE_URL", "http://localhost:11434/v1")
+    monkeypatch.delenv("HARNTEST_JUDGE_API_KEY", raising=False)
+
+    from harntest.judge.pydantic_ai import default_judge
+
+    with pytest.raises(EnvironmentError, match="HARNTEST_JUDGE_API_KEY"):
+        default_judge()
+
+
+def test_default_judge_raises_with_api_key_but_no_base_url(monkeypatch):
+    monkeypatch.setenv("HARNTEST_JUDGE_MODEL", "llama3.2")
+    monkeypatch.delenv("HARNTEST_JUDGE_BASE_URL", raising=False)
+    monkeypatch.setenv("HARNTEST_JUDGE_API_KEY", "local")
+
+    from harntest.judge.pydantic_ai import default_judge
+
+    with pytest.raises(EnvironmentError, match="HARNTEST_JUDGE_BASE_URL"):
         default_judge()
 
 

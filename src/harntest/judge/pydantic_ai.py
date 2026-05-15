@@ -35,15 +35,32 @@ class PydanticAIJudge(Judge):
 
 def default_judge() -> PydanticAIJudge:
     model = os.environ.get("HARNTEST_JUDGE_MODEL")
+    base_url = os.environ.get("HARNTEST_JUDGE_BASE_URL")
+    api_key = os.environ.get("HARNTEST_JUDGE_API_KEY")
+    _validate_env(model=model, base_url=base_url, api_key=api_key)
+    return PydanticAIJudge(model, base_url=base_url, api_key=api_key)  # type: ignore[arg-type]
+
+
+def _validate_env(
+    *, model: str | None, base_url: str | None, api_key: str | None
+) -> None:
     if not model:
         raise EnvironmentError(
             "HARNTEST_JUDGE_MODEL is not set. "
             "Set it to a model string such as 'anthropic:claude-haiku-4-5-20251001' "
             "or 'openai:gpt-4o-mini'. See README for full configuration options."
         )
-    base_url = os.environ.get("HARNTEST_JUDGE_BASE_URL")
-    api_key = os.environ.get("HARNTEST_JUDGE_API_KEY")
-    return PydanticAIJudge(model, base_url=base_url, api_key=api_key)
+    if base_url and not api_key:
+        raise EnvironmentError(
+            "HARNTEST_JUDGE_BASE_URL is set but HARNTEST_JUDGE_API_KEY is not. "
+            "Set HARNTEST_JUDGE_API_KEY to your API key, or 'local' for "
+            "unauthenticated endpoints."
+        )
+    if api_key and not base_url:
+        raise EnvironmentError(
+            "HARNTEST_JUDGE_API_KEY is set but HARNTEST_JUDGE_BASE_URL is not. "
+            "Set HARNTEST_JUDGE_BASE_URL to your endpoint URL."
+        )
 
 
 def _resolve_model(
@@ -57,6 +74,6 @@ def _resolve_model(
 
         return OpenAIChatModel(
             model,
-            provider=OpenAIProvider(base_url=base_url, api_key=api_key or "local"),
+            provider=OpenAIProvider(base_url=base_url, api_key=api_key),
         )
     return model
