@@ -13,8 +13,8 @@ import os
 import docker
 import pytest
 
-from harntest import Agents
-from harntest.agent.agent_run import AgentRun
+from tea import Agents
+from tea.agent.agent_run import AgentRun
 
 
 def _docker_available() -> bool:

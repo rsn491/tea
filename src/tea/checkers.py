@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from harntest._context import _active_checks
-from harntest.agent.agent_run import AgentRun
+from tea._context import _active_checks
+from tea.agent.agent_run import AgentRun
 
 
 def check(label: str, condition: bool) -> bool:
@@ -40,7 +40,7 @@ def check_judge_task(
     min_score: float = 0.5,
     judge: object | None = None,
 ) -> float:
-    from harntest.judge import Judge, default_judge
+    from tea.judge import Judge, default_judge
 
     if judge is None:
         judge = default_judge()

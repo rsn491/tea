@@ -1,6 +1,6 @@
 import json
 
-from harntest.agent.claude_code import ClaudeCode
+from tea.agent.claude_code import ClaudeCode
 
 parse = ClaudeCode._parse
 

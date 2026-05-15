@@ -7,10 +7,10 @@ from pathlib import Path
 from types import ModuleType
 from typing import Callable
 
-from harntest._context import _active_checks, _active_collector
-from harntest.agent.agent_run import AgentRun
-from harntest.tui import _cyan, _dim, _Spinner
-from harntest.tui.runner_view import print_test_header, print_test_results
+from tea._context import _active_checks, _active_collector
+from tea.agent.agent_run import AgentRun
+from tea.tui import _cyan, _dim, _Spinner
+from tea.tui.runner_view import print_test_header, print_test_results
 
 
 def discover_test_files(path: Path) -> list[Path]:
@@ -44,7 +44,7 @@ def run(target: str, default_iterations: int = 1) -> None:
         module = load_module(path)
         fn = getattr(module, fn_name, None)
         if fn is None:
-            print(f"harntest: '{fn_name}' not found in {file_part}")
+            print(f"tea: '{fn_name}' not found in {file_part}")
             sys.exit(1)
         test_cases = [(path, fn)]
     else:
@@ -56,7 +56,7 @@ def run(target: str, default_iterations: int = 1) -> None:
         ]
 
     if not test_cases:
-        print(f"harntest: no tests found in '{target}'")
+        print(f"tea: no tests found in '{target}'")
         sys.exit(1)
 
     last_file: Path | None = None
@@ -64,7 +64,7 @@ def run(target: str, default_iterations: int = 1) -> None:
         if file_path != last_file:
             print(f"  {_cyan('──')} {_dim(str(file_path))}")
             last_file = file_path
-        n = getattr(fn, "_harntest_iterations", default_iterations)
+        n = getattr(fn, "_tea_iterations", default_iterations)
         TestRunner(iterations=n).run(fn)
 
 
@@ -72,7 +72,7 @@ def iterations(n: int) -> Callable:
     """Decorator to set the default iteration count for a test function."""
 
     def decorator(fn: Callable) -> Callable:
-        fn._harntest_iterations = n
+        fn._tea_iterations = n
         return fn
 
     return decorator

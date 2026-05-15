@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
-from harntest.executor import Executor
+from tea.executor import Executor
 
 from .agent import Agent
 from .agent_run import AgentRun

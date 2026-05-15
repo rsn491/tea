@@ -4,13 +4,13 @@ import argparse
 import sys
 from collections.abc import Sequence
 
-from harntest.runner import run
-from harntest.tui import print_banner
+from tea.runner import run
+from tea.tui import print_banner
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="harntest",
+        prog="tea",
         description="Run agentic CLI tests against Claude Code or Codex in Docker.",
         add_help=True,
     )

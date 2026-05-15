@@ -1,4 +1,4 @@
-from harntest import Agents, check_diff_added
+from tea import Agents, check_diff_added
 
 
 def test_add_minus_operation_codex():

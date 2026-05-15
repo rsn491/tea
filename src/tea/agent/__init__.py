@@ -1,4 +1,4 @@
-from harntest.executor.docker import DockerExecutor
+from tea.executor.docker import DockerExecutor
 
 from .agent import Agent as Agent
 from .claude_code import ClaudeCode, ClaudeCodeHarness

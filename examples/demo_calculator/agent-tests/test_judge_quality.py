@@ -3,16 +3,16 @@ Example: LLM-as-judge assertion using check_judge_task.
 
 Configure your judge model via env vars before running:
 
-    export HARNTEST_JUDGE_MODEL="llama3.2"
-    export HARNTEST_JUDGE_BASE_URL="https://<your-ollama-cloud-host>/v1"
-    export HARNTEST_JUDGE_API_KEY="<your-token>"
+    export TEA_JUDGE_MODEL="llama3.2"
+    export TEA_JUDGE_BASE_URL="https://<your-ollama-cloud-host>/v1"
+    export TEA_JUDGE_API_KEY="<your-token>"
 
 Then run:
 
-    harntest examples/demo_calculator/agent-tests/test_judge_quality.py
+    tea examples/demo_calculator/agent-tests/test_judge_quality.py
 """
 
-from harntest import Agents, check_judge_task
+from tea import Agents, check_judge_task
 
 
 def test_minus_implementation_quality():
