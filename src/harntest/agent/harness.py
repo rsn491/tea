@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 from harntest.executor import Executor
@@ -25,3 +26,8 @@ class Harness:
         spec = self._agent.build_spec(text, timeout)
         raw = self._executor.run(spec, workdir)
         return self._agent.parse(raw)
+
+
+class ApiKeyHarness(Harness, ABC):
+    @abstractmethod
+    def with_api_key(self) -> Harness: ...
