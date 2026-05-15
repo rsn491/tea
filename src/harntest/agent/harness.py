@@ -31,5 +31,3 @@ class Harness:
 class ApiKeyHarness(Harness, ABC):
     @abstractmethod
     def with_api_key(self) -> Harness: ...
-
-
