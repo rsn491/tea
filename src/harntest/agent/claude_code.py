@@ -4,24 +4,35 @@ import json
 import os
 
 from harntest.executor import DockerSpec, RawResult
+from harntest.executor.docker import DockerExecutor
 
 from .agent import Agent
 from .agent_run import AgentRun, Step, ToolCall
+from .harness import ApiKeyHarness, Harness
 
 _CLAUDE_IMAGE = "node:22"
 _DEFAULT_MAX_TURNS = 25
+_DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 
 
 class ClaudeCode(Agent):
+    def __init__(
+        self,
+        model: str = _DEFAULT_MODEL,
+        max_turns: int = _DEFAULT_MAX_TURNS,
+    ) -> None:
+        self._model = model
+        self._max_turns = max_turns
+
     def build_spec(self, prompt: str, timeout: int) -> DockerSpec:
         npm_prefix = "/home/node/.npm-global"
         env: dict[str, str] = {"HOME": "/home/node", "NPM_CONFIG_PREFIX": npm_prefix}
-        if token := os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"):
-            env["CLAUDE_CODE_OAUTH_TOKEN"] = token
+        if key := os.environ.get("ANTHROPIC_API_KEY"):
+            env["ANTHROPIC_API_KEY"] = key
         return DockerSpec(
             command=(
                 f"{npm_prefix}/bin/claude --dangerously-skip-permissions"
-                f" --model claude-haiku-4-5-20251001 --max-turns {_DEFAULT_MAX_TURNS}"
+                f" --model {self._model} --max-turns {self._max_turns}"
                 f' --print --output-format stream-json --verbose "{_esc(prompt)}"'
             ),
             setup_command=(
@@ -104,6 +115,16 @@ class ClaudeCode(Agent):
                 steps.append(Step(type="tool_result", content=text, raw=msg))
 
         return AgentRun(raw=stdout, steps=steps, tools=tools, skills=skills)
+
+
+class ClaudeCodeHarness(ApiKeyHarness):
+    def with_api_key(self) -> Harness:
+        agent = self._agent
+        model = agent._model if isinstance(agent, ClaudeCode) else _DEFAULT_MODEL
+        max_turns = (
+            agent._max_turns if isinstance(agent, ClaudeCode) else _DEFAULT_MAX_TURNS
+        )
+        return Harness(ClaudeCode(model=model, max_turns=max_turns), DockerExecutor())
 
 
 def _esc(text: str) -> str:
