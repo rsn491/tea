@@ -39,14 +39,16 @@ def default_judge() -> Judge:
     api_key = os.environ.get("HARNTEST_JUDGE_API_KEY")
 
     if not model and not base_url and not api_key:
-        if os.environ.get("ANTHROPIC_API_KEY"):
-            from .claude import ClaudeJudge
+        from .claude import ClaudeJudge
 
+        if os.environ.get("ANTHROPIC_API_KEY"):
             return ClaudeJudge()
+        if oauth_token := os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"):
+            return ClaudeJudge(auth_token=oauth_token)
         raise EnvironmentError(
-            "No judge configured. Either set HARNTEST_JUDGE_MODEL (and optionally "
-            "HARNTEST_JUDGE_BASE_URL / HARNTEST_JUDGE_API_KEY), or set "
-            "ANTHROPIC_API_KEY to use the built-in Claude judge."
+            "No judge configured. Set HARNTEST_JUDGE_MODEL, or ensure "
+            "ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN is set to use "
+            "the built-in Claude judge."
         )
 
     _validate_env(model=model, base_url=base_url, api_key=api_key)

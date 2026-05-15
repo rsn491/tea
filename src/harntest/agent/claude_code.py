@@ -29,6 +29,8 @@ class ClaudeCode(Agent):
         env: dict[str, str] = {"HOME": "/home/node", "NPM_CONFIG_PREFIX": npm_prefix}
         if key := os.environ.get("ANTHROPIC_API_KEY"):
             env["ANTHROPIC_API_KEY"] = key
+        if token := os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"):
+            env["CLAUDE_CODE_OAUTH_TOKEN"] = token
         return DockerSpec(
             command=(
                 f"{npm_prefix}/bin/claude --dangerously-skip-permissions"

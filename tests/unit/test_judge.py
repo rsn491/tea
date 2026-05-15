@@ -119,11 +119,19 @@ def test_diff_returns_empty_string_for_unknown_file():
 # --- default_judge() env var wiring ---
 
 
+def _clear_judge_env(monkeypatch):
+    for var in (
+        "HARNTEST_JUDGE_MODEL",
+        "HARNTEST_JUDGE_BASE_URL",
+        "HARNTEST_JUDGE_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "CLAUDE_CODE_OAUTH_TOKEN",
+    ):
+        monkeypatch.delenv(var, raising=False)
+
+
 def test_default_judge_raises_without_any_config(monkeypatch):
-    monkeypatch.delenv("HARNTEST_JUDGE_MODEL", raising=False)
-    monkeypatch.delenv("HARNTEST_JUDGE_BASE_URL", raising=False)
-    monkeypatch.delenv("HARNTEST_JUDGE_API_KEY", raising=False)
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    _clear_judge_env(monkeypatch)
 
     from harntest.judge.pydantic_ai import default_judge
 
@@ -134,16 +142,32 @@ def test_default_judge_raises_without_any_config(monkeypatch):
 def test_default_judge_falls_back_to_claude_judge_when_anthropic_key_set(monkeypatch):
     from unittest.mock import patch
 
-    monkeypatch.delenv("HARNTEST_JUDGE_MODEL", raising=False)
-    monkeypatch.delenv("HARNTEST_JUDGE_BASE_URL", raising=False)
-    monkeypatch.delenv("HARNTEST_JUDGE_API_KEY", raising=False)
+    _clear_judge_env(monkeypatch)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
 
     from harntest.judge import ClaudeJudge
     from harntest.judge.pydantic_ai import default_judge
 
-    with patch("harntest.judge.pydantic_ai.Agent"):
+    with patch("harntest.judge.claude.Agent"):
         judge = default_judge()
+
+    assert isinstance(judge, ClaudeJudge)
+
+
+def test_default_judge_falls_back_to_claude_judge_with_oauth_token(monkeypatch):
+    from unittest.mock import MagicMock, patch
+
+    _clear_judge_env(monkeypatch)
+    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "oauth-test-token")
+
+    from harntest.judge import ClaudeJudge
+    from harntest.judge.pydantic_ai import default_judge
+
+    mock_anthropic_client = MagicMock()
+
+    with patch("anthropic.AsyncAnthropic", return_value=mock_anthropic_client):
+        with patch("harntest.judge.claude.Agent"):
+            judge = default_judge()
 
     assert isinstance(judge, ClaudeJudge)
 
