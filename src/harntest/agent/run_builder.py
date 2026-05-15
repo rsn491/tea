@@ -80,18 +80,25 @@ def _diff_snapshots(
         old, new = before.get(fname, ""), after.get(fname, "")
         if old == new:
             continue
-        added_lines, removed_lines = [], []
+        added_lines, removed_lines, unified_lines = [], [], []
         for line in difflib.unified_diff(
             old.splitlines(keepends=True),
             new.splitlines(keepends=True),
+            fromfile=fname,
+            tofile=fname,
             lineterm="",
         ):
+            unified_lines.append(line)
             if line.startswith("+") and not line.startswith("+++"):
                 added_lines.append(line[1:])
             elif line.startswith("-") and not line.startswith("---"):
                 removed_lines.append(line[1:])
         changes[fname] = FileChange(
             path=fname,
-            diff=FileDiff(added="".join(added_lines), removed="".join(removed_lines)),
+            diff=FileDiff(
+                added="".join(added_lines),
+                removed="".join(removed_lines),
+                unified="\n".join(unified_lines),
+            ),
         )
     return changes
