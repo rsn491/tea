@@ -28,7 +28,9 @@ The judge is **separate from the harness** — the agent that runs your task (Cl
 
 ## Configuring the judge
 
-All three env vars are required when using `check_judge_task`:
+If `ANTHROPIC_API_KEY` is already set (as it is for ClaudeCode runs), no extra configuration is needed — `check_judge_task` will automatically use `claude-haiku` as the judge.
+
+To use a different model or provider, set the env vars below. All three are required together when overriding the default:
 
 | Variable | Purpose |
 |---|---|

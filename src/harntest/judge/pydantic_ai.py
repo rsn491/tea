@@ -33,10 +33,22 @@ class PydanticAIJudge(Judge):
         return JudgeResult(score=result.output.score, rationale=result.output.rationale)
 
 
-def default_judge() -> PydanticAIJudge:
+def default_judge() -> Judge:
     model = os.environ.get("HARNTEST_JUDGE_MODEL")
     base_url = os.environ.get("HARNTEST_JUDGE_BASE_URL")
     api_key = os.environ.get("HARNTEST_JUDGE_API_KEY")
+
+    if not model and not base_url and not api_key:
+        if os.environ.get("ANTHROPIC_API_KEY"):
+            from .claude import ClaudeJudge
+
+            return ClaudeJudge()
+        raise EnvironmentError(
+            "No judge configured. Either set HARNTEST_JUDGE_MODEL (and optionally "
+            "HARNTEST_JUDGE_BASE_URL / HARNTEST_JUDGE_API_KEY), or set "
+            "ANTHROPIC_API_KEY to use the built-in Claude judge."
+        )
+
     _validate_env(model=model, base_url=base_url, api_key=api_key)
     return PydanticAIJudge(model, base_url=base_url, api_key=api_key)  # type: ignore[arg-type]
 

@@ -119,15 +119,33 @@ def test_diff_returns_empty_string_for_unknown_file():
 # --- default_judge() env var wiring ---
 
 
-def test_default_judge_raises_without_model_env_var(monkeypatch):
+def test_default_judge_raises_without_any_config(monkeypatch):
     monkeypatch.delenv("HARNTEST_JUDGE_MODEL", raising=False)
     monkeypatch.delenv("HARNTEST_JUDGE_BASE_URL", raising=False)
     monkeypatch.delenv("HARNTEST_JUDGE_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
 
     from harntest.judge.pydantic_ai import default_judge
 
-    with pytest.raises(EnvironmentError, match="HARNTEST_JUDGE_MODEL"):
+    with pytest.raises(EnvironmentError, match="ANTHROPIC_API_KEY"):
         default_judge()
+
+
+def test_default_judge_falls_back_to_claude_judge_when_anthropic_key_set(monkeypatch):
+    from unittest.mock import patch
+
+    monkeypatch.delenv("HARNTEST_JUDGE_MODEL", raising=False)
+    monkeypatch.delenv("HARNTEST_JUDGE_BASE_URL", raising=False)
+    monkeypatch.delenv("HARNTEST_JUDGE_API_KEY", raising=False)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+
+    from harntest.judge import ClaudeJudge
+    from harntest.judge.pydantic_ai import default_judge
+
+    with patch("harntest.judge.pydantic_ai.Agent"):
+        judge = default_judge()
+
+    assert isinstance(judge, ClaudeJudge)
 
 
 def test_default_judge_raises_with_base_url_but_no_api_key(monkeypatch):
