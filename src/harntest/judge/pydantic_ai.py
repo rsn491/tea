@@ -1,0 +1,54 @@
+from __future__ import annotations
+
+import os
+
+from pydantic import BaseModel, Field
+from pydantic_ai import Agent
+from pydantic_ai.models import Model
+
+from .judge import Judge, JudgeResult
+
+_DEFAULT_MODEL = "anthropic:claude-haiku-4-5-20251001"
+
+
+class _Score(BaseModel):
+    score: float = Field(ge=0.0, le=1.0)
+    rationale: str
+
+
+class PydanticAIJudge(Judge):
+    def __init__(
+        self,
+        model: str,
+        *,
+        base_url: str | None = None,
+        api_key: str | None = None,
+    ) -> None:
+        resolved: Model | str = _resolve_model(model, base_url=base_url, api_key=api_key)
+        self._agent: Agent[None, _Score] = Agent(resolved, result_type=_Score)
+
+    def evaluate(self, content: str, prompt: str) -> JudgeResult:
+        message = f"{prompt}\n\nContent:\n{content}"
+        result = self._agent.run_sync(message)
+        return JudgeResult(score=result.data.score, rationale=result.data.rationale)
+
+
+def default_judge() -> PydanticAIJudge:
+    model = os.environ.get("HARNTEST_JUDGE_MODEL", _DEFAULT_MODEL)
+    base_url = os.environ.get("HARNTEST_JUDGE_BASE_URL")
+    api_key = os.environ.get("HARNTEST_JUDGE_API_KEY")
+    return PydanticAIJudge(model, base_url=base_url, api_key=api_key)
+
+
+def _resolve_model(model: str, *, base_url: str | None, api_key: str | None) -> Model | str:
+    # When base_url is set, use an OpenAI-compatible client so any local server
+    # (Ollama, vLLM, LM Studio) works regardless of the provider prefix in `model`.
+    if base_url:
+        from pydantic_ai.models.openai import OpenAIChatModel
+        from pydantic_ai.providers.openai import OpenAIProvider
+
+        return OpenAIChatModel(
+            model,
+            provider=OpenAIProvider(base_url=base_url, api_key=api_key or "local"),
+        )
+    return model

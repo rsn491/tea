@@ -11,6 +11,7 @@ requires-python = ">=3.11"
 license = { file = "LICENSE" }
 dependencies = [
     "docker>=7.0",
+    "pydantic-ai>=0.0.54",
 ]
 
 [project.scripts]
