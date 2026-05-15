@@ -47,8 +47,6 @@ def check_judge_task(
 
     assert isinstance(judge, Judge)
     result = judge.evaluate(diff, prompt)
-    label = (
-        f"judge score {result.score:.2f} >= {min_score} | {result.rationale}"
-    )
+    label = f"judge score {result.score:.2f} >= {min_score} | {result.rationale}"
     check(label, result.score >= min_score)
     return result.score

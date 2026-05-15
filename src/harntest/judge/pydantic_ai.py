@@ -24,7 +24,9 @@ class PydanticAIJudge(Judge):
         base_url: str | None = None,
         api_key: str | None = None,
     ) -> None:
-        resolved: Model | str = _resolve_model(model, base_url=base_url, api_key=api_key)
+        resolved: Model | str = _resolve_model(
+            model, base_url=base_url, api_key=api_key
+        )
         self._agent: Agent[None, _Score] = Agent(resolved, output_type=_Score)
 
     def evaluate(self, content: str, prompt: str) -> JudgeResult:
@@ -40,7 +42,9 @@ def default_judge() -> PydanticAIJudge:
     return PydanticAIJudge(model, base_url=base_url, api_key=api_key)
 
 
-def _resolve_model(model: str, *, base_url: str | None, api_key: str | None) -> Model | str:
+def _resolve_model(
+    model: str, *, base_url: str | None, api_key: str | None
+) -> Model | str:
     # When base_url is set, use an OpenAI-compatible client so any local server
     # (Ollama, vLLM, LM Studio) works regardless of the provider prefix in `model`.
     if base_url:

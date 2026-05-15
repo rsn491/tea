@@ -17,9 +17,7 @@ from harntest import Agents, check_judge_task
 
 def test_minus_implementation_quality():
     run = (
-        Agents.ClaudeCode.prompt(
-            "Add a 'minus' operation to the calculator"
-        )
+        Agents.ClaudeCode.prompt("Add a 'minus' operation to the calculator")
         .workdir("examples/demo_calculator")
         .run()
     )

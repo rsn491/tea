@@ -44,25 +44,33 @@ def test_stub_judge_satisfies_seam():
 
 def test_check_judge_task_passes_when_score_meets_threshold():
     run = _make_run()
-    score = check_judge_task(run, diff="diff text", prompt="p", min_score=0.8, judge=_StubJudge(0.9))
+    score = check_judge_task(
+        run, diff="diff text", prompt="p", min_score=0.8, judge=_StubJudge(0.9)
+    )
     assert score == 0.9
 
 
 def test_check_judge_task_passes_at_exact_threshold():
     run = _make_run()
-    score = check_judge_task(run, diff="diff text", prompt="p", min_score=0.5, judge=_StubJudge(0.5))
+    score = check_judge_task(
+        run, diff="diff text", prompt="p", min_score=0.5, judge=_StubJudge(0.5)
+    )
     assert score == 0.5
 
 
 def test_check_judge_task_raises_when_score_below_threshold():
     run = _make_run()
     with pytest.raises(AssertionError):
-        check_judge_task(run, diff="diff text", prompt="p", min_score=0.8, judge=_StubJudge(0.4))
+        check_judge_task(
+            run, diff="diff text", prompt="p", min_score=0.8, judge=_StubJudge(0.4)
+        )
 
 
 def test_check_judge_task_returns_float():
     run = _make_run()
-    result = check_judge_task(run, diff="x", prompt="p", min_score=0.0, judge=_StubJudge(0.6))
+    result = check_judge_task(
+        run, diff="x", prompt="p", min_score=0.0, judge=_StubJudge(0.6)
+    )
     assert isinstance(result, float)
 
 
@@ -93,7 +101,9 @@ def test_transcript_empty_when_no_steps():
 def test_diff_returns_unified_string():
     file_change = FileChange(
         path="calc.py",
-        diff=FileDiff(added="x = 1", removed="", unified="--- calc.py\n+++ calc.py\n+x = 1"),
+        diff=FileDiff(
+            added="x = 1", removed="", unified="--- calc.py\n+++ calc.py\n+x = 1"
+        ),
     )
     run = _make_run()
     run._files_changed_fn = lambda: {"calc.py": file_change}
