@@ -1,4 +1,4 @@
-# harntest — working in this project
+# tea — working in this project
 
 ## Before committing or pushing
 
@@ -29,7 +29,7 @@ pytest tests/integration -q
 ## Project structure
 
 ```
-src/harntest/
+src/tea/
 ├── agent/          # Agent ABC, ClaudeCode adapter, AgentRun data model
 ├── executor/       # Executor ABC, DockerExecutor adapter
 ├── judge/          # Judge ABC, PydanticAIJudge adapter, JudgeResult
@@ -93,6 +93,6 @@ Callers (`Harness`, `check_judge_task`) depend only on the ABCs, never on concre
 | Variable | Purpose |
 |---|---|
 | `CLAUDE_CODE_OAUTH_TOKEN` | Auth token for the ClaudeCode agent running inside Docker |
-| `HARNTEST_JUDGE_MODEL` | Judge model (default: `anthropic:claude-haiku-4-5-20251001`) |
-| `HARNTEST_JUDGE_BASE_URL` | When set, routes judge calls through an OpenAI-compatible endpoint (OpenRouter, Ollama, vLLM, etc.) |
-| `HARNTEST_JUDGE_API_KEY` | API key for the above; defaults to `"local"` when base_url is set |
+| `TEA_JUDGE_MODEL` | Judge model (default: `anthropic:claude-haiku-4-5-20251001`) |
+| `TEA_JUDGE_BASE_URL` | When set, routes judge calls through an OpenAI-compatible endpoint (OpenRouter, Ollama, vLLM, etc.) |
+| `TEA_JUDGE_API_KEY` | API key for the above; defaults to `"local"` when base_url is set |

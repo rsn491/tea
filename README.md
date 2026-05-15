@@ -1,6 +1,6 @@
-# harntest
+# tea - testing and evaluation for agents
 
-Test and evaluation framework for agentic workflows. Run an agent against a task, assert on what it did, and measure pass rates across multiple iterations.
+Test and evaluation tool for agentic workflows. Run an agent against a task, assert what it did and measure how it performed.
 
 ![Demo output](docs/demo_output.png)
 
@@ -27,7 +27,7 @@ export CLAUDE_CODE_OAUTH_TOKEN="<your-token>"   # obtained via: claude auth logi
 ### Write a test
 
 ```python
-from harntest import Agents, check_diff_added, check_skill_used
+from tea import Agents, check_diff_added, check_skill_used
 
 def test_add_minus_operation():
     run = (
@@ -46,13 +46,13 @@ def test_add_minus_operation():
 
 ```bash
 # Run all tests in a folder
-harntest examples/demo_calculator/agent-tests
+tea examples/demo_calculator/agent-tests
 
 # Run one file, repeated 5 times to measure pass rate
-harntest examples/demo_calculator/agent-tests/test_add_new_operation.py -n 5
+tea examples/demo_calculator/agent-tests/test_add_new_operation.py -n 5
 
 # Run a single test function
-harntest examples/demo_calculator/agent-tests/test_add_new_operation.py::test_add_minus_operation
+tea examples/demo_calculator/agent-tests/test_add_new_operation.py::test_add_minus_operation
 ```
 
 See [examples/demo_calculator/agent-tests](examples/demo_calculator/agent-tests) for runnable examples.
@@ -61,16 +61,12 @@ See [examples/demo_calculator/agent-tests](examples/demo_calculator/agent-tests)
 
 Use `check_judge_task` to grade runs with a language model for assertions that are hard to express deterministically. See [docs/llm-as-judge.md](docs/llm-as-judge.md) for full usage and configuration.
 
-## Requirements
-
----
-
 ## Assertions
 
 Three built-in checkers for deterministic assertions:
 
 ```python
-from harntest import check, check_skill_used, check_diff_added
+from tea import check, check_skill_used, check_diff_added
 
 check("label", condition)                        # generic named assertion
 check_skill_used(run, "skill-name")              # verify a skill was invoked

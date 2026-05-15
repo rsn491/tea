@@ -5,8 +5,8 @@ import os
 import shutil
 import tempfile
 
-from harntest._context import _active_collector
-from harntest.tui.metrics import print_metrics
+from tea._context import _active_collector
+from tea.tui.metrics import print_metrics
 
 from .agent_run import AgentRun, FileChange, FileDiff
 from .harness import Harness

@@ -1,6 +1,8 @@
-from harntest import Agents, check_diff_added, check_skill_used
+from tea import Agents, check_diff_added, check_skill_used
+from tea.runner import iterations
 
 
+@iterations(2)
 def test_add_minus_operation():
     run = (
         Agents.ClaudeCode.prompt("Add 'minus' operation support to the calculator")

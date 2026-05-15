@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from harntest.agent.agent_run import AgentRun
+from tea.agent.agent_run import AgentRun
 
 _COL = 30
 

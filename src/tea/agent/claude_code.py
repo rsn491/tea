@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 import os
 
-from harntest.executor import DockerSpec, RawResult
-from harntest.executor.docker import DockerExecutor
+from tea.executor import DockerSpec, RawResult
+from tea.executor.docker import DockerExecutor
 
 from .agent import Agent
 from .agent_run import AgentRun, Step, ToolCall

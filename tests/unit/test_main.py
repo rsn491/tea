@@ -1,6 +1,6 @@
 import pytest
 
-from harntest.main import main
+from tea.main import main
 
 
 def test_main_help_flag_prints_usage(capsys):
@@ -10,7 +10,7 @@ def test_main_help_flag_prints_usage(capsys):
     assert exc.value.code == 0
     out = capsys.readouterr().out
     assert "usage:" in out
-    assert "harntest" in out
+    assert "tea" in out
 
 
 def test_main_without_target_prints_help(capsys):

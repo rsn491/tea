@@ -19,9 +19,9 @@ _DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 def _default_harness():
     import os
 
-    from harntest.agent.claude_code import ClaudeCode
-    from harntest.agent.harness import Harness
-    from harntest.executor.docker import DockerExecutor
+    from tea.agent.claude_code import ClaudeCode
+    from tea.agent.harness import Harness
+    from tea.executor.docker import DockerExecutor
 
     extra_volumes: dict[str, str] = {}
     host_claude_dir = os.path.expanduser("~/.claude")

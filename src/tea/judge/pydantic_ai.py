@@ -40,14 +40,14 @@ def default_judge() -> Judge:
 
 
 def external_judge() -> Judge:
-    """Build a judge from HARNTEST_JUDGE_MODEL/BASE_URL/API_KEY env vars.
+    """Build a judge from TEA_JUDGE_MODEL/BASE_URL/API_KEY env vars.
 
     Use this when you want a standalone model (Ollama, OpenRouter, etc.) to
     act as judge instead of the default ClaudeCode harness.
     """
-    model = os.environ.get("HARNTEST_JUDGE_MODEL")
-    base_url = os.environ.get("HARNTEST_JUDGE_BASE_URL")
-    api_key = os.environ.get("HARNTEST_JUDGE_API_KEY")
+    model = os.environ.get("TEA_JUDGE_MODEL")
+    base_url = os.environ.get("TEA_JUDGE_BASE_URL")
+    api_key = os.environ.get("TEA_JUDGE_API_KEY")
     _validate_env(model=model, base_url=base_url, api_key=api_key)
     return PydanticAIJudge(model, base_url=base_url, api_key=api_key)  # type: ignore[arg-type]
 
@@ -57,20 +57,20 @@ def _validate_env(
 ) -> None:
     if not model:
         raise EnvironmentError(
-            "HARNTEST_JUDGE_MODEL is not set. "
+            "TEA_JUDGE_MODEL is not set. "
             "Set it to a model string such as 'anthropic:claude-haiku-4-5-20251001' "
             "or 'openai:gpt-4o-mini'. See README for full configuration options."
         )
     if base_url and not api_key:
         raise EnvironmentError(
-            "HARNTEST_JUDGE_BASE_URL is set but HARNTEST_JUDGE_API_KEY is not. "
-            "Set HARNTEST_JUDGE_API_KEY to your API key, or 'local' for "
+            "TEA_JUDGE_BASE_URL is set but TEA_JUDGE_API_KEY is not. "
+            "Set TEA_JUDGE_API_KEY to your API key, or 'local' for "
             "unauthenticated endpoints."
         )
     if api_key and not base_url:
         raise EnvironmentError(
-            "HARNTEST_JUDGE_API_KEY is set but HARNTEST_JUDGE_BASE_URL is not. "
-            "Set HARNTEST_JUDGE_BASE_URL to your endpoint URL."
+            "TEA_JUDGE_API_KEY is set but TEA_JUDGE_BASE_URL is not. "
+            "Set TEA_JUDGE_BASE_URL to your endpoint URL."
         )
 
 

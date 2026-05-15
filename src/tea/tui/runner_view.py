@@ -3,8 +3,8 @@ from __future__ import annotations
 import statistics
 from typing import Callable
 
-from harntest.agent.agent_run import AgentRun
-from harntest.tui import _FAIL, _PASS, _bold_cyan, _c, _dim, _green, _red, _row
+from tea.agent.agent_run import AgentRun
+from tea.tui import _FAIL, _PASS, _bold_cyan, _c, _dim, _green, _red, _row
 
 
 def print_test_header(name: str, iterations: int) -> None:

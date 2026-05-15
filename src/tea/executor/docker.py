@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from harntest.infra import DockerRunConfig, run_in_docker
+from tea.infra import DockerRunConfig, run_in_docker
 
 from .executor import DockerSpec, Executor, RawResult
 

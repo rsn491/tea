@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from harntest.executor import ExecutionSpec, RawResult
+from tea.executor import ExecutionSpec, RawResult
 
 from .agent_run import AgentRun
 
