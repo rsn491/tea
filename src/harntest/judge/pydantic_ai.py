@@ -34,15 +34,20 @@ class PydanticAIJudge(Judge):
 
 
 def default_judge() -> Judge:
+    from .harness_judge import HarnessJudge
+
+    return HarnessJudge()
+
+
+def external_judge() -> Judge:
+    """Build a judge from HARNTEST_JUDGE_MODEL/BASE_URL/API_KEY env vars.
+
+    Use this when you want a standalone model (Ollama, OpenRouter, etc.) to
+    act as judge instead of the default ClaudeCode harness.
+    """
     model = os.environ.get("HARNTEST_JUDGE_MODEL")
     base_url = os.environ.get("HARNTEST_JUDGE_BASE_URL")
     api_key = os.environ.get("HARNTEST_JUDGE_API_KEY")
-
-    if not model and not base_url and not api_key:
-        from .harness_judge import HarnessJudge
-
-        return HarnessJudge()
-
     _validate_env(model=model, base_url=base_url, api_key=api_key)
     return PydanticAIJudge(model, base_url=base_url, api_key=api_key)  # type: ignore[arg-type]
 

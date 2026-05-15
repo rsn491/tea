@@ -30,7 +30,7 @@ The judge is **separate from the harness** — the agent that runs your task (Cl
 
 No extra configuration is needed. By default `check_judge_task` uses the same ClaudeCode harness (Docker + `claude-haiku`) that runs the main agent, so whatever auth you already have set up just works.
 
-The tradeoff is an extra Docker call per judge invocation. To use a lighter-weight external model instead, set the env vars below. All three are required together:
+The tradeoff is an extra Docker call per judge invocation. To use a standalone external model instead, use `external_judge()` and set the env vars below. All three are required together:
 
 | Variable | Purpose |
 |---|---|
@@ -53,4 +53,12 @@ export HARNTEST_JUDGE_MODEL="google/gemma-3-27b-it"
 export HARNTEST_JUDGE_BASE_URL="http://localhost:11434/v1"
 export HARNTEST_JUDGE_API_KEY="local"
 export HARNTEST_JUDGE_MODEL="llama3.2"
+```
+
+Then pass it explicitly:
+
+```python
+from harntest import check_judge_task, external_judge
+
+check_judge_task(run, diff=..., prompt=..., judge=external_judge())
 ```

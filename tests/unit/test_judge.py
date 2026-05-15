@@ -119,23 +119,22 @@ def test_diff_returns_empty_string_for_unknown_file():
 # --- default_judge() env var wiring ---
 
 
-def _clear_judge_env(monkeypatch):
-    for var in (
-        "HARNTEST_JUDGE_MODEL",
-        "HARNTEST_JUDGE_BASE_URL",
-        "HARNTEST_JUDGE_API_KEY",
-    ):
-        monkeypatch.delenv(var, raising=False)
-
-
-def test_default_judge_returns_harness_judge_with_no_config(monkeypatch):
-    _clear_judge_env(monkeypatch)
-
+def test_default_judge_always_returns_harness_judge():
     from harntest.judge import HarnessJudge
     from harntest.judge.pydantic_ai import default_judge
 
-    judge = default_judge()
-    assert isinstance(judge, HarnessJudge)
+    assert isinstance(default_judge(), HarnessJudge)
+
+
+def test_external_judge_raises_without_model_env_var(monkeypatch):
+    monkeypatch.delenv("HARNTEST_JUDGE_MODEL", raising=False)
+    monkeypatch.delenv("HARNTEST_JUDGE_BASE_URL", raising=False)
+    monkeypatch.delenv("HARNTEST_JUDGE_API_KEY", raising=False)
+
+    from harntest.judge.pydantic_ai import external_judge
+
+    with pytest.raises(EnvironmentError, match="HARNTEST_JUDGE_MODEL"):
+        external_judge()
 
 
 # --- HarnessJudge._parse ---
@@ -163,29 +162,29 @@ def test_harness_judge_parse_raises_when_no_json():
         _parse("I think it looks good overall.")
 
 
-def test_default_judge_raises_with_base_url_but_no_api_key(monkeypatch):
+def test_external_judge_raises_with_base_url_but_no_api_key(monkeypatch):
     monkeypatch.setenv("HARNTEST_JUDGE_MODEL", "llama3.2")
     monkeypatch.setenv("HARNTEST_JUDGE_BASE_URL", "http://localhost:11434/v1")
     monkeypatch.delenv("HARNTEST_JUDGE_API_KEY", raising=False)
 
-    from harntest.judge.pydantic_ai import default_judge
+    from harntest.judge.pydantic_ai import external_judge
 
     with pytest.raises(EnvironmentError, match="HARNTEST_JUDGE_API_KEY"):
-        default_judge()
+        external_judge()
 
 
-def test_default_judge_raises_with_api_key_but_no_base_url(monkeypatch):
+def test_external_judge_raises_with_api_key_but_no_base_url(monkeypatch):
     monkeypatch.setenv("HARNTEST_JUDGE_MODEL", "llama3.2")
     monkeypatch.delenv("HARNTEST_JUDGE_BASE_URL", raising=False)
     monkeypatch.setenv("HARNTEST_JUDGE_API_KEY", "local")
 
-    from harntest.judge.pydantic_ai import default_judge
+    from harntest.judge.pydantic_ai import external_judge
 
     with pytest.raises(EnvironmentError, match="HARNTEST_JUDGE_BASE_URL"):
-        default_judge()
+        external_judge()
 
 
-def test_default_judge_reads_env_vars(monkeypatch):
+def test_external_judge_reads_env_vars(monkeypatch):
     from unittest.mock import MagicMock, patch
 
     monkeypatch.setenv("HARNTEST_JUDGE_MODEL", "gpt-4o-mini")
@@ -195,15 +194,14 @@ def test_default_judge_reads_env_vars(monkeypatch):
     mock_model_cls = MagicMock()
     mock_provider_cls = MagicMock()
 
-    # Patch at the source so the local imports inside _resolve_model pick them up.
     with (
         patch("pydantic_ai.models.openai.OpenAIChatModel", mock_model_cls),
         patch("pydantic_ai.providers.openai.OpenAIProvider", mock_provider_cls),
         patch("harntest.judge.pydantic_ai.Agent"),
     ):
-        from harntest.judge.pydantic_ai import default_judge
+        from harntest.judge.pydantic_ai import external_judge
 
-        default_judge()
+        external_judge()
 
         mock_provider_cls.assert_called_once_with(
             base_url="http://localhost:11434/v1", api_key="local"

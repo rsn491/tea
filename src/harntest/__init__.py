@@ -12,7 +12,7 @@ from harntest.checkers import (
 )
 from harntest.executor import DockerSpec, ExecutionSpec, Executor, RawResult
 from harntest.executor.docker import DockerExecutor
-from harntest.judge import HarnessJudge, Judge, JudgeResult
+from harntest.judge import HarnessJudge, Judge, JudgeResult, external_judge
 from harntest.runner import TestRunner, iterations
 
 __all__ = [
@@ -44,4 +44,5 @@ __all__ = [
     "HarnessJudge",
     "Judge",
     "JudgeResult",
+    "external_judge",
 ]
