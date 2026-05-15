@@ -16,6 +16,27 @@ Respond with ONLY a JSON object, no other text:
 _DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 
 
+def _default_harness():
+    import os
+
+    from harntest.agent.claude_code import ClaudeCode
+    from harntest.agent.harness import Harness
+    from harntest.executor.docker import DockerExecutor
+
+    extra_volumes: dict[str, str] = {}
+    host_claude_dir = os.path.expanduser("~/.claude")
+    if os.path.isdir(host_claude_dir):
+        extra_volumes[host_claude_dir] = "/home/node/.claude"
+
+    class _JudgeAgent(ClaudeCode):
+        def build_spec(self, prompt: str, timeout: int):
+            spec = super().build_spec(prompt, timeout)
+            spec.extra_volumes.update(extra_volumes)
+            return spec
+
+    return Harness(_JudgeAgent(model=_DEFAULT_MODEL, max_turns=1), DockerExecutor())
+
+
 class HarnessJudge(Judge):
     """Judge that runs evaluation through the ClaudeCode harness.
 
@@ -25,14 +46,7 @@ class HarnessJudge(Judge):
 
     def __init__(self, harness=None) -> None:
         if harness is None:
-            from harntest.agent.claude_code import ClaudeCode
-            from harntest.agent.harness import Harness
-            from harntest.executor.docker import DockerExecutor
-
-            harness = Harness(
-                ClaudeCode(model=_DEFAULT_MODEL, max_turns=1),
-                DockerExecutor(),
-            )
+            harness = _default_harness()
         self._harness = harness
 
     def evaluate(self, content: str, prompt: str) -> JudgeResult:
