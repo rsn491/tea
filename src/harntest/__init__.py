@@ -3,7 +3,12 @@ from harntest.agent.agent import Agent
 from harntest.agent.agent_run import AgentRun, FileChange, FileDiff, Step, ToolCall
 from harntest.agent.claude_code import ClaudeCode, ClaudeCodeHarness
 from harntest.agent.codex import Codex, CodexHarness
-from harntest.agent.harness import ApiKeyHarness, Harness
+from harntest.agent.harness import (
+    ApiKeyHarness,
+    AuthenticatedHarness,
+    Harness,
+    SubscriptionHarness,
+)
 from harntest.checkers import check, check_diff_added, check_skill_used
 from harntest.executor import DockerSpec, ExecutionSpec, Executor, RawResult
 from harntest.executor.docker import DockerExecutor
@@ -22,7 +27,9 @@ __all__ = [
     "DockerSpec",
     "RawResult",
     "ApiKeyHarness",
+    "AuthenticatedHarness",
     "Harness",
+    "SubscriptionHarness",
     "RunBuilder",
     "AgentRun",
     "FileChange",

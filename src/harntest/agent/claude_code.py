@@ -2,17 +2,20 @@ from __future__ import annotations
 
 import json
 import os
+from typing import Literal
 
 from harntest.executor import DockerSpec, RawResult
 from harntest.executor.docker import DockerExecutor
 
 from .agent import Agent
 from .agent_run import AgentRun, Step, ToolCall
-from .harness import ApiKeyHarness, Harness
+from .harness import AuthenticatedHarness, Harness
 
 _CLAUDE_IMAGE = "node:22"
 _DEFAULT_MAX_TURNS = 25
 _DEFAULT_MODEL = "claude-haiku-4-5-20251001"
+
+Auth = Literal["auto", "api_key", "subscription"]
 
 
 class ClaudeCode(Agent):
@@ -20,15 +23,24 @@ class ClaudeCode(Agent):
         self,
         model: str = _DEFAULT_MODEL,
         max_turns: int = _DEFAULT_MAX_TURNS,
+        auth: Auth = "auto",
     ) -> None:
         self._model = model
         self._max_turns = max_turns
+        self._auth = auth
 
     def build_spec(self, prompt: str, timeout: int) -> DockerSpec:
         npm_prefix = "/home/node/.npm-global"
         env: dict[str, str] = {"HOME": "/home/node", "NPM_CONFIG_PREFIX": npm_prefix}
         if key := os.environ.get("ANTHROPIC_API_KEY"):
             env["ANTHROPIC_API_KEY"] = key
+
+        extra_volumes: dict[str, str] = {}
+        if self._auth == "subscription":
+            host_claude_dir = os.path.expanduser("~/.claude")
+            if os.path.isdir(host_claude_dir):
+                extra_volumes[host_claude_dir] = "/home/node/.claude"
+
         return DockerSpec(
             command=(
                 f"{npm_prefix}/bin/claude --dangerously-skip-permissions"
@@ -42,6 +54,7 @@ class ClaudeCode(Agent):
             image=_CLAUDE_IMAGE,
             user="node",
             timeout=timeout,
+            extra_volumes=extra_volumes,
         )
 
     def parse(self, raw: RawResult) -> AgentRun:
@@ -117,14 +130,26 @@ class ClaudeCode(Agent):
         return AgentRun(raw=stdout, steps=steps, tools=tools, skills=skills)
 
 
-class ClaudeCodeHarness(ApiKeyHarness):
-    def with_api_key(self) -> Harness:
+class ClaudeCodeHarness(AuthenticatedHarness):
+    def _agent_params(self) -> tuple[str, int]:
         agent = self._agent
-        model = agent._model if isinstance(agent, ClaudeCode) else _DEFAULT_MODEL
-        max_turns = (
-            agent._max_turns if isinstance(agent, ClaudeCode) else _DEFAULT_MAX_TURNS
+        if isinstance(agent, ClaudeCode):
+            return agent._model, agent._max_turns
+        return _DEFAULT_MODEL, _DEFAULT_MAX_TURNS
+
+    def with_api_key(self) -> Harness:
+        model, max_turns = self._agent_params()
+        return Harness(
+            ClaudeCode(model=model, max_turns=max_turns, auth="api_key"),
+            DockerExecutor(),
         )
-        return Harness(ClaudeCode(model=model, max_turns=max_turns), DockerExecutor())
+
+    def with_subscription(self) -> Harness:
+        model, max_turns = self._agent_params()
+        return Harness(
+            ClaudeCode(model=model, max_turns=max_turns, auth="subscription"),
+            DockerExecutor(),
+        )
 
 
 def _esc(text: str) -> str:

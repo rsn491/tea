@@ -33,3 +33,12 @@ class ApiKeyHarness(Harness, ABC):
     def with_api_key(self) -> Harness: ...
 
 
+class SubscriptionHarness(Harness, ABC):
+    @abstractmethod
+    def with_subscription(self) -> Harness: ...
+
+
+class AuthenticatedHarness(ApiKeyHarness, SubscriptionHarness, ABC):
+    """Harness that supports both API key and subscription auth."""
+
+
