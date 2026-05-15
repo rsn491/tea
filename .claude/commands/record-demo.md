@@ -16,7 +16,11 @@ record it with asciinema, and convert it to a GIF.
 2. **Read the demo spec** at `.claude/demos/$ARGUMENTS.md`. Understand what it
    wants to demonstrate and what setup is required.
 
-3. **Write a shell script** at `/tmp/harntest-demo-$ARGUMENTS.sh` that implements
+3. **Verify the feature works** by doing a dry run of the key commands before
+   recording. If anything fails, stop and fix it — a demo showing failures is
+   not useful.
+
+4. **Write a shell script** at `/tmp/harntest-demo-$ARGUMENTS.sh` that implements
    the demo. The script should:
    - Include any setup steps described in the spec (create files, activate venv, etc.)
    - Run the commands that show the feature working
@@ -26,17 +30,17 @@ record it with asciinema, and convert it to a GIF.
    - Print a blank line between sections for visual breathing room
    - Work from the repo root directory
 
-4. **Record** the script with a wide terminal so output isn't truncated:
+5. **Record** the script with a wide terminal so output isn't truncated:
    ```
    asciinema rec --overwrite --cols 220 --rows 50 -c "bash /tmp/harntest-demo-$ARGUMENTS.sh" docs/demos/$ARGUMENTS.cast
    ```
 
-5. **Convert** to GIF:
+6. **Convert** to GIF:
    ```
    agg --font-size 14 --cols 220 docs/demos/$ARGUMENTS.cast docs/demos/$ARGUMENTS.gif
    ```
 
-6. **Output** the ready-to-paste markdown snippet:
+7. **Output** the ready-to-paste markdown snippet:
    ```
    ![Demo](docs/demos/$ARGUMENTS.gif)
    ```

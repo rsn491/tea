@@ -28,4 +28,5 @@ The goal is to show the full loop: a test file, running it, and seeing the resul
 
 - The test actually runs the agent — this is a real run, not staged output.
 - It will take 1-3 minutes; that's expected and fine for the recording.
-- If the test fails, the GIF still shows the tool working — failure output is valid.
+- **The demo must show passing checks.** Before recording, verify the test passes
+  by running it once manually. Only record once you see ✓ results, not ✗.

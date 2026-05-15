@@ -18,6 +18,12 @@ class ClaudeCode(Agent):
         env: dict[str, str] = {"HOME": "/home/node", "NPM_CONFIG_PREFIX": npm_prefix}
         if token := os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"):
             env["CLAUDE_CODE_OAUTH_TOKEN"] = token
+
+        extra_volumes: dict[str, str] = {}
+        host_claude_dir = os.path.expanduser("~/.claude")
+        if os.path.isdir(host_claude_dir):
+            extra_volumes[host_claude_dir] = "/home/node/.claude"
+
         return DockerSpec(
             command=(
                 f"{npm_prefix}/bin/claude --dangerously-skip-permissions"
@@ -31,6 +37,7 @@ class ClaudeCode(Agent):
             image=_CLAUDE_IMAGE,
             user="node",
             timeout=timeout,
+            extra_volumes=extra_volumes,
         )
 
     def parse(self, raw: RawResult) -> AgentRun:
