@@ -28,14 +28,9 @@ The judge is **separate from the harness** — the agent that runs your task (Cl
 
 ## Configuring the judge
 
-No extra configuration is needed if either of the following is already set:
+No extra configuration is needed. By default `check_judge_task` uses the same ClaudeCode harness (Docker + `claude-haiku`) that runs the main agent, so whatever auth you already have set up just works.
 
-- `ANTHROPIC_API_KEY` — used by API key auth
-- `CLAUDE_CODE_OAUTH_TOKEN` — used by subscription auth
-
-`check_judge_task` will automatically use `claude-haiku` as the judge, with whichever credential the main agent is already using.
-
-To use a different model or provider entirely, set the env vars below. All three are required together when overriding the default:
+The tradeoff is an extra Docker call per judge invocation. To use a lighter-weight external model instead, set the env vars below. All three are required together:
 
 | Variable | Purpose |
 |---|---|

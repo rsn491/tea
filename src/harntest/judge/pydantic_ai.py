@@ -39,17 +39,9 @@ def default_judge() -> Judge:
     api_key = os.environ.get("HARNTEST_JUDGE_API_KEY")
 
     if not model and not base_url and not api_key:
-        from .claude import ClaudeJudge
+        from .harness_judge import HarnessJudge
 
-        if os.environ.get("ANTHROPIC_API_KEY"):
-            return ClaudeJudge()
-        if oauth_token := os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"):
-            return ClaudeJudge(auth_token=oauth_token)
-        raise EnvironmentError(
-            "No judge configured. Set HARNTEST_JUDGE_MODEL, or ensure "
-            "ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN is set to use "
-            "the built-in Claude judge."
-        )
+        return HarnessJudge()
 
     _validate_env(model=model, base_url=base_url, api_key=api_key)
     return PydanticAIJudge(model, base_url=base_url, api_key=api_key)  # type: ignore[arg-type]

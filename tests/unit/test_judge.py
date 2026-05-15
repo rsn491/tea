@@ -124,52 +124,43 @@ def _clear_judge_env(monkeypatch):
         "HARNTEST_JUDGE_MODEL",
         "HARNTEST_JUDGE_BASE_URL",
         "HARNTEST_JUDGE_API_KEY",
-        "ANTHROPIC_API_KEY",
-        "CLAUDE_CODE_OAUTH_TOKEN",
     ):
         monkeypatch.delenv(var, raising=False)
 
 
-def test_default_judge_raises_without_any_config(monkeypatch):
+def test_default_judge_returns_harness_judge_with_no_config(monkeypatch):
     _clear_judge_env(monkeypatch)
 
+    from harntest.judge import HarnessJudge
     from harntest.judge.pydantic_ai import default_judge
 
-    with pytest.raises(EnvironmentError, match="ANTHROPIC_API_KEY"):
-        default_judge()
+    judge = default_judge()
+    assert isinstance(judge, HarnessJudge)
 
 
-def test_default_judge_falls_back_to_claude_judge_when_anthropic_key_set(monkeypatch):
-    from unittest.mock import patch
-
-    _clear_judge_env(monkeypatch)
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-
-    from harntest.judge import ClaudeJudge
-    from harntest.judge.pydantic_ai import default_judge
-
-    with patch("harntest.judge.claude.Agent"):
-        judge = default_judge()
-
-    assert isinstance(judge, ClaudeJudge)
+# --- HarnessJudge._parse ---
 
 
-def test_default_judge_falls_back_to_claude_judge_with_oauth_token(monkeypatch):
-    from unittest.mock import MagicMock, patch
+def test_harness_judge_parse_extracts_score_and_rationale():
+    from harntest.judge.harness_judge import _parse
 
-    _clear_judge_env(monkeypatch)
-    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "oauth-test-token")
+    result = _parse('{"score": 0.85, "rationale": "looks good"}')
+    assert result.score == 0.85
+    assert result.rationale == "looks good"
 
-    from harntest.judge import ClaudeJudge
-    from harntest.judge.pydantic_ai import default_judge
 
-    mock_anthropic_client = MagicMock()
+def test_harness_judge_parse_tolerates_surrounding_text():
+    from harntest.judge.harness_judge import _parse
 
-    with patch("anthropic.AsyncAnthropic", return_value=mock_anthropic_client):
-        with patch("harntest.judge.claude.Agent"):
-            judge = default_judge()
+    result = _parse('Here is my answer:\n{"score": 0.5, "rationale": "ok"}\nDone.')
+    assert result.score == 0.5
 
-    assert isinstance(judge, ClaudeJudge)
+
+def test_harness_judge_parse_raises_when_no_json():
+    from harntest.judge.harness_judge import _parse
+
+    with pytest.raises(ValueError, match="valid JSON score"):
+        _parse("I think it looks good overall.")
 
 
 def test_default_judge_raises_with_base_url_but_no_api_key(monkeypatch):

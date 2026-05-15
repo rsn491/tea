@@ -12,7 +12,7 @@ from harntest.checkers import (
 )
 from harntest.executor import DockerSpec, ExecutionSpec, Executor, RawResult
 from harntest.executor.docker import DockerExecutor
-from harntest.judge import ClaudeJudge, Judge, JudgeResult
+from harntest.judge import HarnessJudge, Judge, JudgeResult
 from harntest.runner import TestRunner, iterations
 
 __all__ = [
@@ -41,7 +41,7 @@ __all__ = [
     "check_diff_added",
     "check_judge_task",
     "check_skill_used",
-    "ClaudeJudge",
+    "HarnessJudge",
     "Judge",
     "JudgeResult",
 ]
