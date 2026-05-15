@@ -25,12 +25,12 @@ class PydanticAIJudge(Judge):
         api_key: str | None = None,
     ) -> None:
         resolved: Model | str = _resolve_model(model, base_url=base_url, api_key=api_key)
-        self._agent: Agent[None, _Score] = Agent(resolved, result_type=_Score)
+        self._agent: Agent[None, _Score] = Agent(resolved, output_type=_Score)
 
     def evaluate(self, content: str, prompt: str) -> JudgeResult:
         message = f"{prompt}\n\nContent:\n{content}"
         result = self._agent.run_sync(message)
-        return JudgeResult(score=result.data.score, rationale=result.data.rationale)
+        return JudgeResult(score=result.output.score, rationale=result.output.rationale)
 
 
 def default_judge() -> PydanticAIJudge:
