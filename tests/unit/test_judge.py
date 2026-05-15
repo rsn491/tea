@@ -119,6 +119,15 @@ def test_diff_returns_empty_string_for_unknown_file():
 # --- default_judge() env var wiring ---
 
 
+def test_default_judge_raises_without_model_env_var(monkeypatch):
+    monkeypatch.delenv("HARNTEST_JUDGE_MODEL", raising=False)
+
+    from harntest.judge.pydantic_ai import default_judge
+
+    with pytest.raises(EnvironmentError, match="HARNTEST_JUDGE_MODEL"):
+        default_judge()
+
+
 def test_default_judge_reads_env_vars(monkeypatch):
     from unittest.mock import MagicMock, patch
 

@@ -8,8 +8,6 @@ from pydantic_ai.models import Model
 
 from .judge import Judge, JudgeResult
 
-_DEFAULT_MODEL = "anthropic:claude-haiku-4-5-20251001"
-
 
 class _Score(BaseModel):
     score: float = Field(ge=0.0, le=1.0)
@@ -36,7 +34,13 @@ class PydanticAIJudge(Judge):
 
 
 def default_judge() -> PydanticAIJudge:
-    model = os.environ.get("HARNTEST_JUDGE_MODEL", _DEFAULT_MODEL)
+    model = os.environ.get("HARNTEST_JUDGE_MODEL")
+    if not model:
+        raise EnvironmentError(
+            "HARNTEST_JUDGE_MODEL is not set. "
+            "Set it to a model string such as 'anthropic:claude-haiku-4-5-20251001' "
+            "or 'openai:gpt-4o-mini'. See README for full configuration options."
+        )
     base_url = os.environ.get("HARNTEST_JUDGE_BASE_URL")
     api_key = os.environ.get("HARNTEST_JUDGE_API_KEY")
     return PydanticAIJudge(model, base_url=base_url, api_key=api_key)
