@@ -10,6 +10,7 @@ _CONTAINER_WORKDIR = "/workspace"
 class DockerExecutor(Executor):
     def run(self, spec: DockerSpec, workdir: str | None) -> RawResult:
         volumes = {workdir: _CONTAINER_WORKDIR} if workdir else {}
+        volumes.update(spec.extra_volumes)
         container_cwd = _CONTAINER_WORKDIR if workdir else None
         shell_cmd = (
             f"{spec.setup_command} && {spec.command}"

@@ -57,6 +57,12 @@ harntest examples/demo_calculator/agent-tests/test_add_new_operation.py::test_ad
 
 See [examples/demo_calculator/agent-tests](examples/demo_calculator/agent-tests) for runnable examples.
 
+## LLM-as-judge
+
+Use `check_judge_task` to grade runs with a language model for assertions that are hard to express deterministically. See [docs/llm-as-judge.md](docs/llm-as-judge.md) for full usage and configuration.
+
+## Requirements
+
 ---
 
 ## Assertions

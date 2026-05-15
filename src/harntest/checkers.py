@@ -30,3 +30,23 @@ def check_diff_added(
     change = run.files_changed.get(file)
     found = change is not None and code in change.diff.added
     return check(label, found)
+
+
+def check_judge_task(
+    run: AgentRun,
+    *,
+    diff: str,
+    prompt: str,
+    min_score: float = 0.5,
+    judge: object | None = None,
+) -> float:
+    from harntest.judge import Judge, default_judge
+
+    if judge is None:
+        judge = default_judge()
+
+    assert isinstance(judge, Judge)
+    result = judge.evaluate(diff, prompt)
+    label = f"judge score {result.score:.2f} >= {min_score} | {result.rationale}"
+    check(label, result.score >= min_score)
+    return result.score

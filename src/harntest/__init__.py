@@ -4,9 +4,15 @@ from harntest.agent.agent_run import AgentRun, FileChange, FileDiff, Step, ToolC
 from harntest.agent.claude_code import ClaudeCode, ClaudeCodeHarness
 from harntest.agent.codex import Codex, CodexHarness
 from harntest.agent.harness import ApiKeyHarness, Harness
-from harntest.checkers import check, check_diff_added, check_skill_used
+from harntest.checkers import (
+    check,
+    check_diff_added,
+    check_judge_task,
+    check_skill_used,
+)
 from harntest.executor import DockerSpec, ExecutionSpec, Executor, RawResult
 from harntest.executor.docker import DockerExecutor
+from harntest.judge import HarnessJudge, Judge, JudgeResult, external_judge
 from harntest.runner import TestRunner, iterations
 
 __all__ = [
@@ -33,5 +39,10 @@ __all__ = [
     "iterations",
     "check",
     "check_diff_added",
+    "check_judge_task",
     "check_skill_used",
+    "HarnessJudge",
+    "Judge",
+    "JudgeResult",
+    "external_judge",
 ]

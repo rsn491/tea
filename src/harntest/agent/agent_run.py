@@ -23,6 +23,7 @@ class Step:
 class FileDiff:
     added: str
     removed: str
+    unified: str = ""
 
 
 @dataclass
@@ -47,6 +48,22 @@ class AgentRun:
     @cached_property
     def files_changed(self) -> dict[str, FileChange]:
         return self._files_changed_fn()
+
+    def diff(self, file: str) -> str:
+        change = self.files_changed.get(file)
+        return change.diff.unified if change else ""
+
+    @property
+    def transcript(self) -> str:
+        parts = []
+        for step in self.steps:
+            if step.type == "text":
+                parts.append(f"[assistant] {step.content}")
+            elif step.type == "tool_use":
+                parts.append(f"[tool_use] {step.content}")
+            elif step.type == "tool_result":
+                parts.append(f"[tool_result] {step.content}")
+        return "\n".join(parts)
 
     @property
     def step_count(self) -> int:
