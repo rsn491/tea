@@ -17,7 +17,7 @@ dependencies = [
 [project.scripts]
 tea = "tea.main:main"
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",
