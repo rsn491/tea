@@ -35,9 +35,10 @@ record it with asciinema, and convert it to a GIF.
    asciinema rec --overwrite --cols 220 --rows 50 -c "bash /tmp/harntest-demo-$ARGUMENTS.sh" docs/demos/$ARGUMENTS.cast
    ```
 
-6. **Convert** to GIF:
+6. **Convert** to GIF, compressing idle time so long LLM calls don't inflate
+   the GIF duration, and holding the final frame long enough to read:
    ```
-   agg --font-size 14 --cols 220 docs/demos/$ARGUMENTS.cast docs/demos/$ARGUMENTS.gif
+   agg --font-size 14 --cols 220 --idle-time-limit 1 --last-frame-duration 10 docs/demos/$ARGUMENTS.cast docs/demos/$ARGUMENTS.gif
    ```
 
 7. **Output** the ready-to-paste markdown snippet:
