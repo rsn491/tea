@@ -22,8 +22,14 @@ the deterministic recorder.
 
 4. **Write the shell script** at `docs/demos/$ARGUMENTS.sh`. Rules:
 
+   **Environment setup (hidden from viewer):**
    - `cd "$(git rev-parse --show-toplevel)"` at the top so it works from anywhere
-   - Include all setup from the spec (venv activation, Docker checks, etc.)
+   - Run all environment setup silently before the first echoed command: venv
+     activation, Docker readiness checks, pre-warming caches, etc. Redirect
+     noisy output to `/dev/null` if needed. The viewer should see only the
+     commands that are part of the story, not scaffolding.
+
+   **Demo commands (visible to viewer):**
    - Echo each command before running it: `echo "$ <command>"`
    - `sleep 1` before each command so the viewer can read the prompt
    - `sleep 5` after commands whose output the viewer should read (cat, short results)
@@ -37,8 +43,12 @@ the deterministic recorder.
    #!/usr/bin/env bash
    set -e
    cd "$(git rev-parse --show-toplevel)"
-   source venv/bin/activate
 
+   # ── silent setup — not part of the story ──────────────────────────────────
+   source venv/bin/activate
+   docker info >/dev/null 2>&1  # ensure Docker is ready before recording starts
+
+   # ── demo ──────────────────────────────────────────────────────────────────
    echo "$ cat path/to/file.py"
    sleep 1
    cat path/to/file.py

@@ -3,8 +3,12 @@
 # Generated from docs/demos/calculator-test.md
 set -e
 cd "$(git rev-parse --show-toplevel)"
-source venv/bin/activate
 
+# ── silent setup ───────────────────────────────────────────────────────────────
+source venv/bin/activate
+docker info >/dev/null 2>&1  # ensure Docker is ready before recording starts
+
+# ── demo ───────────────────────────────────────────────────────────────────────
 echo "$ cat examples/demo_calculator/agent-tests/test_add_new_operation.py"
 sleep 1
 cat examples/demo_calculator/agent-tests/test_add_new_operation.py
