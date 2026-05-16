@@ -23,7 +23,9 @@ record it with asciinema, and convert it to a GIF.
 4. **Write a shell script** at `/tmp/harntest-demo-$ARGUMENTS.sh` that implements
    the demo. The script should:
    - Include any setup steps described in the spec (create files, activate venv, etc.)
-   - Run the commands that show the feature working
+   - Run the commands that show the feature working, prefixed with `NO_SPINNER=1` to
+     suppress the animated spinner (it emits output every 80ms, preventing `agg` from
+     compressing idle time — without it, LLM wait time shows in full)
    - Use `sleep 1` before running each command so the viewer can read the prompt
    - Use `sleep 5` after commands that produce output worth reading (cat, short results)
    - Use no extra sleep after long-running commands (the output itself provides pacing)
