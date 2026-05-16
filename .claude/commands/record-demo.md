@@ -61,14 +61,19 @@ and open a draft PR with the GIF embedded.
    NO_SPINNER=1 harntest path/to/test.py
    ```
 
-5. **Record, convert, and upload** in one step:
+5. **Record and convert:**
    ```
-   python scripts/record_demo.py $ARGUMENTS --upload
+   python scripts/record_demo.py $ARGUMENTS
    ```
-   This records with asciinema (220×50), converts with agg (idle-time-limit 1s,
-   last-frame 10s), uploads the GIF to a persistent GitHub draft release, and
-   prints a hosted `![Demo](https://...)` snippet. Copy that URL — you need it
-   for the PR.
+   Progress goes to stderr; the GIF path is printed on stdout.
+
+   **Upload to GitHub** (pipe or run separately):
+   ```
+   python scripts/upload_gif.py docs/demos/$ARGUMENTS.gif
+   ```
+   Uploads to a persistent `demo-assets` draft release (created once, reused
+   forever; re-uploading the same name replaces the asset). Prints the hosted
+   URL on stdout. Copy that URL — you need it for the PR.
 
 6. **Commit** the cast file, GIF, and shell script:
    ```
