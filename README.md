@@ -15,7 +15,7 @@ Test and evaluation tool for agentic workflows. Run an agent against a task, ass
 ### Install
 
 ```bash
-pip install -e .
+uv sync
 ```
 
 ### Set up credentials
@@ -88,13 +88,13 @@ The agent that executes your task runs inside Docker. Configure it via:
 ## Development
 
 ```bash
-pip install -e ".[dev]"
-pre-commit install
+uv sync --group dev
+uv run pre-commit install
 ```
 
 Run checks manually:
 
 ```bash
-pre-commit run --all-files
-pytest tests/unit -q
+uv run pre-commit run --all-files
+uv run pytest tests/unit -q
 ```
