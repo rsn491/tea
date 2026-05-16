@@ -218,3 +218,7 @@ __marimo__/
 .streamlit/secrets.toml
 
 .vscode
+
+# Demo recording artifacts — GIFs live on catbox.moe, casts are large binary files
+docs/demos/*.gif
+docs/demos/*.cast

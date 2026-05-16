@@ -11,6 +11,7 @@ from .banner import print_banner
 # ── color helpers ──────────────────────────────────────────────────────────────
 
 _TTY = sys.stdout.isatty() and os.environ.get("NO_COLOR") is None
+_NO_SPINNER = os.environ.get("NO_SPINNER") is not None
 _ANSI_RE = re.compile(r"\033\[[0-9;]*m")
 
 
@@ -58,7 +59,7 @@ class _Spinner:
         self._thread = threading.Thread(target=self._spin, daemon=True)
 
     def _spin(self) -> None:
-        if not _TTY:
+        if not _TTY or _NO_SPINNER:
             return
         clear = " " * (_vlen(self._label) + 10)
         for ch in itertools.cycle(self._FRAMES):
