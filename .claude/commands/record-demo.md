@@ -1,21 +1,18 @@
-Record a harntest demo, upload the GIF to Imgur, and open a draft PR.
+Record a harntest demo, upload the GIF to catbox.moe, and open a draft PR.
 
 Usage: /record-demo <demo-name>
 
 The demo name refers to a spec file at `docs/demos/<demo-name>.md` that describes
 what the demo should show. You will translate that into a shell script, record it,
-and open a draft PR with the GIF embedded.
+upload the GIF (no credentials needed), and open a draft PR with it embedded.
 
 ## Steps
 
-1. **Check dependencies.** Verify `asciinema`, `agg`, and `gh` are on PATH,
-   and that `IMGUR_CLIENT_ID` is set in the environment.
+1. **Check dependencies.** Verify `asciinema`, `agg`, and `gh` are on PATH.
+   If any are missing, stop and tell the user:
    - asciinema: `pip install asciinema --break-system-packages`
    - agg: download binary from https://github.com/asciinema/agg/releases
    - gh: https://cli.github.com
-   - IMGUR_CLIENT_ID: register free at https://api.imgur.com/oauth2/addclient
-     (choose "OAuth 2 authorization without a callback URL" — no approval needed)
-   If `IMGUR_CLIENT_ID` is missing, stop and tell the user to set it.
 
 2. **Read the demo spec** at `docs/demos/$ARGUMENTS.md`. Understand what it wants
    to demonstrate and what setup is required.
@@ -70,12 +67,12 @@ and open a draft PR with the GIF embedded.
    ```
    Progress goes to stderr; the GIF path is printed on stdout.
 
-   **Upload to Imgur** (pipe or run separately):
+   **Upload to catbox.moe** (no credentials needed — pipe or run separately):
    ```
    python scripts/upload_gif.py docs/demos/$ARGUMENTS.gif
    ```
-   Requires `IMGUR_CLIENT_ID` in the environment. Prints the Imgur URL on
-   stdout. Copy that URL — you need it for the PR.
+   Prints the hosted `https://files.catbox.moe/...` URL on stdout.
+   Copy that URL — you need it for the PR.
 
 6. **Commit** the cast file, GIF, and shell script:
    ```
@@ -94,7 +91,7 @@ and open a draft PR with the GIF embedded.
 
    ## Demo
 
-   ![Demo](<hosted-gif-url-from-step-5>)
+   ![Demo](<catbox-url-from-step-5>)
 
    🤖 Generated with [Claude Code](https://claude.com/claude-code)
    EOF
