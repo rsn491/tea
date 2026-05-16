@@ -1,30 +1,26 @@
 #!/usr/bin/env python3
-"""Upload a GIF to a persistent GitHub draft release and print the hosted URL.
+"""Upload a GIF to Imgur and print the hosted URL.
 
 Usage:
     python scripts/upload_gif.py <gif-path>
     python scripts/record_demo.py <name> | xargs python scripts/upload_gif.py
 
-Uploads to a draft release tagged 'demo-assets' (created once, reused forever).
-Re-uploading the same filename replaces the previous asset — safe to re-run.
-Prints the browser_download_url on stdout.
+Requires an Imgur client ID in the IMGUR_CLIENT_ID environment variable.
+Get one (free, 2 minutes) at https://api.imgur.com/oauth2/addclient —
+choose "OAuth 2 authorization without a callback URL". No approval needed.
 
-Dependencies:
-    gh  — https://cli.github.com  (must be authenticated)
+Prints the Imgur URL on stdout, suitable for embedding in PR descriptions.
 """
 
 from __future__ import annotations
 
+import base64
 import json
-import shutil
-import subprocess
+import os
 import sys
+import urllib.parse
 import urllib.request
 from pathlib import Path
-
-_RELEASE_TAG = "demo-assets"
-_RELEASE_NAME = "Demo Assets"
-_RELEASE_BODY = "Persistent store for demo GIFs embedded in PR descriptions. Do not delete."
 
 
 def _die(msg: str) -> None:
@@ -32,72 +28,26 @@ def _die(msg: str) -> None:
     sys.exit(1)
 
 
-def _gh(*args: str) -> dict | list:
-    r = subprocess.run(["gh", "api", *args], capture_output=True, text=True, check=True)
-    return json.loads(r.stdout)
+def upload(gif: Path, client_id: str) -> str:
+    encoded = base64.b64encode(gif.read_bytes()).decode()
+    payload = f"image={urllib.parse.quote(encoded)}&type=base64".encode()
 
-
-def _repo_slug() -> str:
-    r = subprocess.run(
-        ["gh", "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"],
-        capture_output=True, text=True, check=True,
-    )
-    return r.stdout.strip()
-
-
-def _gh_token() -> str:
-    r = subprocess.run(["gh", "auth", "token"], capture_output=True, text=True, check=True)
-    return r.stdout.strip()
-
-
-def _get_or_create_release(slug: str) -> int:
-    for r in _gh(f"/repos/{slug}/releases"):
-        if r.get("tag_name") == _RELEASE_TAG:
-            return r["id"]
-    new = _gh(
-        f"/repos/{slug}/releases",
-        "--method", "POST",
-        "--field", f"tag_name={_RELEASE_TAG}",
-        "--field", f"name={_RELEASE_NAME}",
-        "--field", f"body={_RELEASE_BODY}",
-        "--field", "draft=true",
-    )
-    return new["id"]
-
-
-def _delete_existing(slug: str, release_id: int, filename: str) -> None:
-    for asset in _gh(f"/repos/{slug}/releases/{release_id}/assets"):
-        if asset["name"] == filename:
-            subprocess.run(
-                ["gh", "api", f"/repos/{slug}/releases/assets/{asset['id']}",
-                 "--method", "DELETE"],
-                check=True, capture_output=True,
-            )
-
-
-def upload(gif: Path) -> str:
-    if not shutil.which("gh"):
-        _die("gh not found — install from https://cli.github.com")
-
-    slug = _repo_slug()
-    release_id = _get_or_create_release(slug)
-    _delete_existing(slug, release_id, gif.name)
-
-    token = _gh_token()
-    url = f"https://uploads.github.com/repos/{slug}/releases/{release_id}/assets?name={gif.name}"
     req = urllib.request.Request(
-        url, data=gif.read_bytes(),
+        "https://api.imgur.com/3/image",
+        data=payload,
         headers={
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "image/gif",
-            "Accept": "application/vnd.github+json",
+            "Authorization": f"Client-ID {client_id}",
+            "Content-Type": "application/x-www-form-urlencoded",
         },
         method="POST",
     )
     with urllib.request.urlopen(req) as resp:
         result = json.loads(resp.read())
 
-    return result["browser_download_url"]
+    if not result.get("success"):
+        _die(f"imgur upload failed: {result}")
+
+    return result["data"]["link"]
 
 
 def main() -> None:
@@ -105,12 +55,20 @@ def main() -> None:
         print(__doc__)
         sys.exit(0 if sys.argv[1:] and sys.argv[1] in ("-h", "--help") else 1)
 
+    client_id = os.environ.get("IMGUR_CLIENT_ID")
+    if not client_id:
+        _die(
+            "IMGUR_CLIENT_ID not set.\n"
+            "Get a free client ID at https://api.imgur.com/oauth2/addclient\n"
+            "(choose 'OAuth 2 authorization without a callback URL')"
+        )
+
     gif = Path(sys.argv[1])
     if not gif.exists():
         _die(f"file not found: {gif}")
 
-    print(f"uploading {gif.name} …", file=sys.stderr)
-    url = upload(gif)
+    print(f"uploading {gif.name} to imgur …", file=sys.stderr)
+    url = upload(gif, client_id)
     print(url)  # stdout: URL for piping
 
 
