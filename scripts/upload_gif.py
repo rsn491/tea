@@ -1,24 +1,16 @@
 #!/usr/bin/env python3
-"""Upload a GIF to Imgur and print the hosted URL.
+"""Upload a GIF to catbox.moe and print the hosted URL.
 
 Usage:
     python scripts/upload_gif.py <gif-path>
     python scripts/record_demo.py <name> | xargs python scripts/upload_gif.py
 
-Requires an Imgur client ID in the IMGUR_CLIENT_ID environment variable.
-Get one (free, 2 minutes) at https://api.imgur.com/oauth2/addclient —
-choose "OAuth 2 authorization without a callback URL". No approval needed.
-
-Prints the Imgur URL on stdout, suitable for embedding in PR descriptions.
+No account or credentials needed. Prints the URL on stdout.
 """
 
 from __future__ import annotations
 
-import base64
-import json
-import os
 import sys
-import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -28,26 +20,30 @@ def _die(msg: str) -> None:
     sys.exit(1)
 
 
-def upload(gif: Path, client_id: str) -> str:
-    encoded = base64.b64encode(gif.read_bytes()).decode()
-    payload = f"image={urllib.parse.quote(encoded)}&type=base64".encode()
+def upload(gif: Path) -> str:
+    boundary = "----FormBoundary"
+    body = (
+        f"--{boundary}\r\n"
+        f'Content-Disposition: form-data; name="reqtype"\r\n\r\n'
+        f"fileupload\r\n"
+        f"--{boundary}\r\n"
+        f'Content-Disposition: form-data; name="fileToUpload"; filename="{gif.name}"\r\n'
+        f"Content-Type: image/gif\r\n\r\n"
+    ).encode() + gif.read_bytes() + f"\r\n--{boundary}--\r\n".encode()
 
     req = urllib.request.Request(
-        "https://api.imgur.com/3/image",
-        data=payload,
-        headers={
-            "Authorization": f"Client-ID {client_id}",
-            "Content-Type": "application/x-www-form-urlencoded",
-        },
+        "https://catbox.moe/user/api.php",
+        data=body,
+        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
         method="POST",
     )
     with urllib.request.urlopen(req) as resp:
-        result = json.loads(resp.read())
+        url = resp.read().decode().strip()
 
-    if not result.get("success"):
-        _die(f"imgur upload failed: {result}")
+    if not url.startswith("https://"):
+        _die(f"catbox upload failed: {url}")
 
-    return result["data"]["link"]
+    return url
 
 
 def main() -> None:
@@ -55,20 +51,12 @@ def main() -> None:
         print(__doc__)
         sys.exit(0 if sys.argv[1:] and sys.argv[1] in ("-h", "--help") else 1)
 
-    client_id = os.environ.get("IMGUR_CLIENT_ID")
-    if not client_id:
-        _die(
-            "IMGUR_CLIENT_ID not set.\n"
-            "Get a free client ID at https://api.imgur.com/oauth2/addclient\n"
-            "(choose 'OAuth 2 authorization without a callback URL')"
-        )
-
     gif = Path(sys.argv[1])
     if not gif.exists():
         _die(f"file not found: {gif}")
 
-    print(f"uploading {gif.name} to imgur …", file=sys.stderr)
-    url = upload(gif, client_id)
+    print(f"uploading {gif.name} …", file=sys.stderr)
+    url = upload(gif)
     print(url)  # stdout: URL for piping
 
 
