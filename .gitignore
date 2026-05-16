@@ -218,3 +218,7 @@ __marimo__/
 .streamlit/secrets.toml
 
 .vscode
+
+# Demo recording artifacts — all local, nothing committed
+# GIFs are uploaded to catbox.moe; specs and scripts are written on demand
+docs/demos/
