@@ -219,6 +219,6 @@ __marimo__/
 
 .vscode
 
-# Demo recording artifacts — GIFs live on catbox.moe, casts are large binary files
-docs/demos/*.gif
-docs/demos/*.cast
+# Demo recording artifacts — all local, nothing committed
+# GIFs are uploaded to catbox.moe; specs and scripts are written on demand
+docs/demos/

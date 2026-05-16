@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
-"""Record a harntest demo to GIF.
+"""Record a tea demo to GIF.
 
 Usage:
     python scripts/record_demo.py <demo-name>
 
-Reads the shell script at docs/demos/<demo-name>.sh, records it with asciinema,
-converts to GIF with agg, and prints the GIF path on stdout.
+Reads the shell script at /tmp/tea-demo-<demo-name>.sh, records it with
+asciinema, converts to GIF, and prints the GIF path on stdout.
+All working files stay in /tmp — nothing is written to the repo.
 
 Pipe into upload_gif.py to get a hosted URL:
     python scripts/record_demo.py <name> | xargs python scripts/upload_gif.py
 
-The shell script must already exist. Use /record-demo to have an agent generate
-it from the spec at docs/demos/<demo-name>.md.
+The shell script must already exist at /tmp/tea-demo-<name>.sh.
+Use /record-demo to have an agent generate it from a demo description.
 
 Dependencies:
     asciinema  — pip install asciinema --break-system-packages
@@ -30,6 +31,7 @@ _ROWS = 50
 _FONT_SIZE = 14
 _IDLE_TIME_LIMIT = 1
 _LAST_FRAME_DURATION = 10
+_TMP = Path("/tmp")
 
 
 def _die(msg: str) -> None:
@@ -50,29 +52,16 @@ def _check_deps() -> None:
     _die("\n".join(lines))
 
 
-def _repo_root() -> Path:
-    path = Path(__file__).resolve().parent
-    while path != path.parent:
-        if (path / ".git").exists():
-            return path
-        path = path.parent
-    _die("not inside a git repository")
-    raise SystemExit(1)
-
-
-def record(name: str, repo_root: Path) -> Path:
-    demo_dir = repo_root / "docs" / "demos"
-    script = demo_dir / f"{name}.sh"
-    cast = demo_dir / f"{name}.cast"
-    gif = demo_dir / f"{name}.gif"
+def record(name: str) -> Path:
+    script = _TMP / f"tea-demo-{name}.sh"
+    cast   = _TMP / f"tea-demo-{name}.cast"
+    gif    = _TMP / f"tea-demo-{name}.gif"
 
     if not script.exists():
         _die(
             f"shell script not found: {script}\n"
-            f"Generate it first via /record-demo or from the spec at docs/demos/{name}.md."
+            "Write it first — see /record-demo for instructions."
         )
-
-    demo_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"recording {name} …", file=sys.stderr)
     subprocess.run(
@@ -104,7 +93,7 @@ def main() -> None:
         sys.exit(0 if sys.argv[1:] and sys.argv[1] in ("-h", "--help") else 1)
 
     _check_deps()
-    gif = record(sys.argv[1], _repo_root())
+    gif = record(sys.argv[1])
     print(gif)  # stdout: path for piping
 
 
