@@ -1,17 +1,18 @@
-Record a harntest demo and produce a GIF for embedding in PR descriptions.
+Record a harntest demo, upload the GIF to GitHub, and open a draft PR.
 
 Usage: /record-demo <demo-name>
 
 The demo name refers to a spec file at `docs/demos/<demo-name>.md` that describes
-what the demo should show. You will translate that into a shell script, then run
-the deterministic recorder.
+what the demo should show. You will translate that into a shell script, record it,
+and open a draft PR with the GIF embedded.
 
 ## Steps
 
-1. **Check dependencies.** Verify `asciinema` and `agg` are on PATH. If either is
-   missing, stop and tell the user:
+1. **Check dependencies.** Verify `asciinema`, `agg`, and `gh` are on PATH.
+   If any are missing, stop and tell the user:
    - asciinema: `pip install asciinema --break-system-packages`
    - agg: download binary from https://github.com/asciinema/agg/releases
+   - gh: https://cli.github.com
 
 2. **Read the demo spec** at `docs/demos/$ARGUMENTS.md`. Understand what it wants
    to demonstrate and what setup is required.
@@ -46,7 +47,7 @@ the deterministic recorder.
 
    # ── silent setup — not part of the story ──────────────────────────────────
    source venv/bin/activate
-   docker info >/dev/null 2>&1  # ensure Docker is ready before recording starts
+   docker info >/dev/null 2>&1
 
    # ── demo ──────────────────────────────────────────────────────────────────
    echo "$ cat path/to/file.py"
@@ -60,15 +61,35 @@ the deterministic recorder.
    NO_SPINNER=1 harntest path/to/test.py
    ```
 
-5. **Record and convert** using the deterministic recorder:
+5. **Record, convert, and upload** in one step:
    ```
-   python scripts/record_demo.py $ARGUMENTS
+   python scripts/record_demo.py $ARGUMENTS --upload
    ```
    This records with asciinema (220×50), converts with agg (idle-time-limit 1s,
-   last-frame 10s), and prints the markdown embed snippet.
+   last-frame 10s), uploads the GIF to a persistent GitHub draft release, and
+   prints a hosted `![Demo](https://...)` snippet. Copy that URL — you need it
+   for the PR.
 
-6. **Output** the snippet printed by the script:
+6. **Commit** the cast file, GIF, and shell script:
    ```
-   ![Demo](docs/demos/$ARGUMENTS.gif)
+   git add docs/demos/$ARGUMENTS.cast docs/demos/$ARGUMENTS.gif docs/demos/$ARGUMENTS.sh
+   git commit -m "Add $ARGUMENTS demo recording"
+   git push
    ```
-   And report the file size.
+
+7. **Open a draft PR** using the hosted URL from step 5:
+   ```
+   gh pr create --draft \
+     --title "<short description of the feature shown>" \
+     --body "$(cat <<'EOF'
+   ## Summary
+   <bullet points describing the change>
+
+   ## Demo
+
+   ![Demo](<hosted-gif-url-from-step-5>)
+
+   🤖 Generated with [Claude Code](https://claude.com/claude-code)
+   EOF
+   )"
+   ```
