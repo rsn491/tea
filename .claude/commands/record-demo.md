@@ -2,9 +2,9 @@ Record a harntest demo and produce a GIF for embedding in PR descriptions.
 
 Usage: /record-demo <demo-name>
 
-The demo name refers to a file in `.claude/demos/<demo-name>.md` which describes
-what the demo should show. You will translate that description into a shell script,
-record it with asciinema, and convert it to a GIF.
+The demo name refers to a spec file at `docs/demos/<demo-name>.md` that describes
+what the demo should show. You will translate that into a shell script, then run
+the deterministic recorder.
 
 ## Steps
 
@@ -13,38 +13,52 @@ record it with asciinema, and convert it to a GIF.
    - asciinema: `pip install asciinema --break-system-packages`
    - agg: download binary from https://github.com/asciinema/agg/releases
 
-2. **Read the demo spec** at `.claude/demos/$ARGUMENTS.md`. Understand what it
-   wants to demonstrate and what setup is required.
+2. **Read the demo spec** at `docs/demos/$ARGUMENTS.md`. Understand what it wants
+   to demonstrate and what setup is required.
 
 3. **Verify the feature works** by doing a dry run of the key commands before
    recording. If anything fails, stop and fix it — a demo showing failures is
-   not useful.
+   not useful. The demo must show passing checks (✓ not ✗) when applicable.
 
-4. **Write a shell script** at `/tmp/harntest-demo-$ARGUMENTS.sh` that implements
-   the demo. The script should:
-   - Include any setup steps described in the spec (create files, activate venv, etc.)
-   - Run the commands that show the feature working, prefixed with `NO_SPINNER=1` to
-     suppress the animated spinner (it emits output every 80ms, preventing `agg` from
-     compressing idle time — without it, LLM wait time shows in full)
-   - Use `sleep 1` before running each command so the viewer can read the prompt
-   - Use `sleep 5` after commands that produce output worth reading (cat, short results)
-   - Use no extra sleep after long-running commands (the output itself provides pacing)
-   - Print a blank line between sections for visual breathing room
-   - Work from the repo root directory
+4. **Write the shell script** at `docs/demos/$ARGUMENTS.sh`. Rules:
 
-5. **Record** the script with a wide terminal so output isn't truncated:
-   ```
-   asciinema rec --overwrite --cols 220 --rows 50 -c "bash /tmp/harntest-demo-$ARGUMENTS.sh" docs/demos/$ARGUMENTS.cast
+   - `cd "$(git rev-parse --show-toplevel)"` at the top so it works from anywhere
+   - Include all setup from the spec (venv activation, Docker checks, etc.)
+   - Echo each command before running it: `echo "$ <command>"`
+   - `sleep 1` before each command so the viewer can read the prompt
+   - `sleep 5` after commands whose output the viewer should read (cat, short results)
+   - No extra sleep after long-running commands — the output provides pacing
+   - **Prefix harntest with `NO_SPINNER=1`** — the spinner emits output every 80ms
+     and prevents agg from compressing idle time, so LLM wait times show in full
+   - A blank `echo ""` between sections for visual breathing room
+
+   Example skeleton:
+   ```bash
+   #!/usr/bin/env bash
+   set -e
+   cd "$(git rev-parse --show-toplevel)"
+   source venv/bin/activate
+
+   echo "$ cat path/to/file.py"
+   sleep 1
+   cat path/to/file.py
+   sleep 5
+
+   echo ""
+   echo "$ harntest path/to/test.py"
+   sleep 1
+   NO_SPINNER=1 harntest path/to/test.py
    ```
 
-6. **Convert** to GIF, compressing idle time so long LLM calls don't inflate
-   the GIF duration, and holding the final frame long enough to read:
+5. **Record and convert** using the deterministic recorder:
    ```
-   agg --font-size 14 --cols 220 --idle-time-limit 1 --last-frame-duration 10 docs/demos/$ARGUMENTS.cast docs/demos/$ARGUMENTS.gif
+   python scripts/record_demo.py $ARGUMENTS
    ```
+   This records with asciinema (220×50), converts with agg (idle-time-limit 1s,
+   last-frame 10s), and prints the markdown embed snippet.
 
-7. **Output** the ready-to-paste markdown snippet:
+6. **Output** the snippet printed by the script:
    ```
    ![Demo](docs/demos/$ARGUMENTS.gif)
    ```
-   And confirm the GIF was created with its file size.
+   And report the file size.
