@@ -15,6 +15,12 @@ Test and evaluation tool for agentic workflows. Run an agent against a task, ass
 ### Install
 
 ```bash
+pip install -e .
+```
+
+Or with [uv](https://docs.astral.sh/uv/):
+
+```bash
 uv sync
 ```
 
