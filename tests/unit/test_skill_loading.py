@@ -109,3 +109,29 @@ def test_agent_default_prepare_skills_is_noop():
         _make_skill(workdir, "my-skill", "# Should be ignored")
         result = agent.prepare_skills("original prompt", workdir, ["my-skill"])
     assert result == "original prompt"
+
+
+# ── shell-injection regression tests ─────────────────────────────────────────
+
+
+def test_claude_model_injection_is_quoted(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("CLAUDE_CODE_OAUTH_TOKEN", raising=False)
+    spec = ClaudeCode(model="haiku; rm -rf /").build_spec("task", 60)
+    assert "--model 'haiku; rm -rf /'" in spec.command
+    assert "; rm -rf /" not in spec.command.split("'haiku; rm -rf /'")[1]
+
+
+def test_codex_model_injection_is_quoted(monkeypatch):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    spec = Codex(model="gpt`whoami`").build_spec("task", 60)
+    assert "-m 'gpt`whoami`'" in spec.command
+
+
+def test_codex_skill_name_injection_is_quoted(monkeypatch):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    spec = Codex().build_spec("task", 60, ["skill; echo hacked"])
+    assert "'skill; echo hacked'" in spec.setup_command
+    # the injection payload must not appear outside the quoted token
+    sanitised = spec.setup_command.replace("'skill; echo hacked'", "SAFE")
+    assert "echo hacked" not in sanitised

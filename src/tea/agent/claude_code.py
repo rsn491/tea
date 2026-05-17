@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 
 from tea.executor import DockerSpec, RawResult
 from tea.executor.docker import DockerExecutor
@@ -42,7 +43,7 @@ class ClaudeCode(Agent):
         return DockerSpec(
             command=(
                 f"{npm_prefix}/bin/claude --dangerously-skip-permissions"
-                f" --model {self._model} --max-turns {self._max_turns}"
+                f" --model {shlex.quote(self._model)} --max-turns {int(self._max_turns)}"
                 f' --print --output-format stream-json --verbose "{_esc(prompt)}"'
             ),
             setup_command=(

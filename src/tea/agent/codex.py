@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shlex
 
 from tea.executor import DockerSpec, RawResult
 from tea.executor.docker import DockerExecutor
@@ -28,7 +29,7 @@ class Codex(Agent):
                 f"codex exec"
                 f" --dangerously-bypass-approvals-and-sandbox"
                 f" --skip-git-repo-check --ephemeral"
-                f" -m {self._model}"
+                f" -m {shlex.quote(self._model)}"
                 f' "{_esc(prompt)}"'
             ),
             setup_command=_skill_setup(skills) if skills else None,
@@ -61,8 +62,9 @@ def _skill_setup(skills: list[str]) -> str:
     """
     cmds = []
     for name in skills:
-        src = f"/workspace/.claude/skills/{name}/SKILL.md"
-        dst_dir = f"/home/node/.codex/skills/{name}"
+        quoted = shlex.quote(name)
+        src = f"/workspace/.claude/skills/{quoted}/SKILL.md"
+        dst_dir = f"/home/node/.codex/skills/{quoted}"
         cmds.append(f"mkdir -p {dst_dir} && cp {src} {dst_dir}/SKILL.md")
     return " && ".join(cmds)
 
