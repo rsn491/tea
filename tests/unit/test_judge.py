@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+from unittest.mock import MagicMock, patch
+
 import pytest
 
 from tea.agent.agent_run import AgentRun, FileChange, FileDiff, Step
 from tea.checkers import check_judge_task
-from tea.judge import Judge, JudgeResult
+from tea.judge import HarnessJudge, Judge, JudgeResult
+from tea.judge.harness_judge import _parse
+from tea.judge.pydantic_ai import default_judge, external_judge
 
 
 class _StubJudge(Judge):
@@ -120,9 +124,6 @@ def test_diff_returns_empty_string_for_unknown_file():
 
 
 def test_default_judge_always_returns_harness_judge():
-    from tea.judge import HarnessJudge
-    from tea.judge.pydantic_ai import default_judge
-
     assert isinstance(default_judge(), HarnessJudge)
 
 
@@ -130,8 +131,6 @@ def test_external_judge_raises_without_model_env_var(monkeypatch):
     monkeypatch.delenv("TEA_JUDGE_MODEL", raising=False)
     monkeypatch.delenv("TEA_JUDGE_BASE_URL", raising=False)
     monkeypatch.delenv("TEA_JUDGE_API_KEY", raising=False)
-
-    from tea.judge.pydantic_ai import external_judge
 
     with pytest.raises(EnvironmentError, match="TEA_JUDGE_MODEL"):
         external_judge()
@@ -141,23 +140,17 @@ def test_external_judge_raises_without_model_env_var(monkeypatch):
 
 
 def test_harness_judge_parse_extracts_score_and_rationale():
-    from tea.judge.harness_judge import _parse
-
     result = _parse('{"score": 0.85, "rationale": "looks good"}')
     assert result.score == 0.85
     assert result.rationale == "looks good"
 
 
 def test_harness_judge_parse_tolerates_surrounding_text():
-    from tea.judge.harness_judge import _parse
-
     result = _parse('Here is my answer:\n{"score": 0.5, "rationale": "ok"}\nDone.')
     assert result.score == 0.5
 
 
 def test_harness_judge_parse_raises_when_no_json():
-    from tea.judge.harness_judge import _parse
-
     with pytest.raises(ValueError, match="valid JSON score"):
         _parse("I think it looks good overall.")
 
@@ -166,8 +159,6 @@ def test_external_judge_raises_with_base_url_but_no_api_key(monkeypatch):
     monkeypatch.setenv("TEA_JUDGE_MODEL", "llama3.2")
     monkeypatch.setenv("TEA_JUDGE_BASE_URL", "http://localhost:11434/v1")
     monkeypatch.delenv("TEA_JUDGE_API_KEY", raising=False)
-
-    from tea.judge.pydantic_ai import external_judge
 
     with pytest.raises(EnvironmentError, match="TEA_JUDGE_API_KEY"):
         external_judge()
@@ -178,15 +169,11 @@ def test_external_judge_raises_with_api_key_but_no_base_url(monkeypatch):
     monkeypatch.delenv("TEA_JUDGE_BASE_URL", raising=False)
     monkeypatch.setenv("TEA_JUDGE_API_KEY", "local")
 
-    from tea.judge.pydantic_ai import external_judge
-
     with pytest.raises(EnvironmentError, match="TEA_JUDGE_BASE_URL"):
         external_judge()
 
 
 def test_external_judge_reads_env_vars(monkeypatch):
-    from unittest.mock import MagicMock, patch
-
     monkeypatch.setenv("TEA_JUDGE_MODEL", "gpt-4o-mini")
     monkeypatch.setenv("TEA_JUDGE_BASE_URL", "http://localhost:11434/v1")
     monkeypatch.setenv("TEA_JUDGE_API_KEY", "local")
@@ -199,8 +186,6 @@ def test_external_judge_reads_env_vars(monkeypatch):
         patch("tea.judge.pydantic_ai.OpenAIProvider", mock_provider_cls),
         patch("tea.judge.pydantic_ai.Agent"),
     ):
-        from tea.judge.pydantic_ai import external_judge
-
         external_judge()
 
         mock_provider_cls.assert_called_once_with(
