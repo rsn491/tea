@@ -1,15 +1,12 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
 
 from tea.executor import Executor
 
 from .agent import Agent
 from .agent_run import AgentRun
-
-if TYPE_CHECKING:
-    from .run_builder import RunBuilder
+from .run_builder import RunBuilder
 
 
 class Harness:
@@ -18,8 +15,6 @@ class Harness:
         self._executor = executor
 
     def prompt(self, text: str, *, timeout: int = 300) -> RunBuilder:
-        from .run_builder import RunBuilder
-
         return RunBuilder.prompt(self, text, timeout=timeout)
 
     def prepare_skills(self, prompt: str, workdir: str, skills: list[str]) -> str:

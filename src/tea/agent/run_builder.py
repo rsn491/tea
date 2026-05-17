@@ -4,20 +4,28 @@ import difflib
 import os
 import shutil
 import tempfile
+from typing import Protocol
 
 from tea._context import _active_collector
 from tea.tui.metrics import print_metrics
 
 from .agent_run import AgentRun, FileChange, FileDiff
-from .harness import Harness
+
+
+class _Runnable(Protocol):
+    def _execute(
+        self, text: str, *, timeout: int, workdir: str | None, skills: list[str]
+    ) -> AgentRun: ...
+
+    def prepare_skills(self, prompt: str, workdir: str, skills: list[str]) -> str: ...
 
 
 class RunBuilder:
     @classmethod
-    def prompt(cls, runner: Harness, text: str, *, timeout: int = 300) -> RunBuilder:
+    def prompt(cls, runner: _Runnable, text: str, *, timeout: int = 300) -> RunBuilder:
         return cls(runner, text, timeout)
 
-    def __init__(self, runner: Harness, text: str, timeout: int) -> None:
+    def __init__(self, runner: _Runnable, text: str, timeout: int) -> None:
         self._runner = runner
         self._text = text
         self._timeout = timeout
