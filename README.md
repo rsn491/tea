@@ -65,7 +65,7 @@ from tea import check, check_skill_used, check_diff_added, check_judge_task
 check("label", condition)                        # generic named assertion
 check_skill_used(run, "skill-name")              # verify a skill was invoked
 check_diff_added(run, "file.py", "some_symbol")  # verify code was added to a file
-check_judge_task(run, "task-description")        # verify the task was completed correctly
+check_judge_task(run, diff=run.diff("file.py"), prompt="scoring criteria")  # LLM-as-judge assertion
 ```
 
 ## Agents
