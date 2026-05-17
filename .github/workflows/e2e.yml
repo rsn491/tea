@@ -1,0 +1,29 @@
+name: e2e
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  claude-code:
+    uses: ./.github/workflows/harntest.yml
+    with:
+      test-path: examples/demo_calculator/agent-tests/test_add_new_operation.py
+      iterations: 1
+    secrets: inherit
+
+  codex:
+    uses: ./.github/workflows/harntest.yml
+    with:
+      test-path: examples/demo_calculator/agent-tests/test_add_new_operation_codex.py
+      iterations: 1
+    secrets: inherit
+
+  pi:
+    uses: ./.github/workflows/harntest.yml
+    with:
+      test-path: examples/demo_calculator/agent-tests/test_add_new_operation_pi.py
+      iterations: 1
+    secrets: inherit
