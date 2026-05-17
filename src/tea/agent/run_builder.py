@@ -33,10 +33,14 @@ class RunBuilder:
             tmp_dir = tempfile.mkdtemp()
             shutil.copytree(self._workdir, tmp_dir, dirs_exist_ok=True)
         effective_workdir = tmp_dir if tmp_dir else self._workdir
+        skills = _discover_skills(self._workdir)
+        text = self._text
+        if skills and effective_workdir:
+            text = self._runner.prepare_skills(text, effective_workdir, skills)
         try:
             before = _snapshot(self._workdir)
             result = self._runner._execute(
-                self._text, timeout=self._timeout, workdir=effective_workdir
+                text, timeout=self._timeout, workdir=effective_workdir, skills=skills
             )
             after = _snapshot(effective_workdir)
             result._files_changed_fn = lambda: _diff_snapshots(before, after)
@@ -53,6 +57,19 @@ class RunBuilder:
 
 
 # helpers
+
+
+def _discover_skills(workdir: str | None) -> list[str]:
+    if not workdir:
+        return []
+    skills_dir = os.path.join(workdir, ".claude", "skills")
+    if not os.path.isdir(skills_dir):
+        return []
+    return [
+        entry.name
+        for entry in os.scandir(skills_dir)
+        if entry.is_dir() and os.path.isfile(os.path.join(entry.path, "SKILL.md"))
+    ]
 
 
 def _snapshot(path: str | None) -> dict[str, str]:
