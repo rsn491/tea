@@ -4,8 +4,8 @@ import json
 import os
 from dataclasses import dataclass
 
-from tea.executor import DockerSpec, ExecutionRequirements, RawResult
-from tea.executor.docker import DockerExecutor
+from tea.executor import ConfigScope, ExecutionRequirements, ExecutionSpec, RawResult
+from tea.executor.docker import DockerExecutor, DockerProfile
 
 from .agent import Agent
 from .agent_run import AgentRun, Step, ToolCall
@@ -13,12 +13,18 @@ from .harness import Harness
 
 _PI_IMAGE = "node:22"
 _PI_PREFIX = "/home/node/.npm-global"
-# Install into ~/.npm-global (writable by the node user) and add to PATH.
 _PI_INSTALL = (
     f"mkdir -p {_PI_PREFIX}"
     f" && npm install --prefix {_PI_PREFIX} @earendil-works/pi-coding-agent"
     f" --quiet --no-progress >/dev/null 2>&1"
     f" && export PATH={_PI_PREFIX}/node_modules/.bin:$PATH"
+)
+
+_PI_DOCKER_PROFILE = DockerProfile(
+    image=_PI_IMAGE,
+    user="node",
+    setup_command=_PI_INSTALL,
+    env_overrides={"HOME": "/home/node"},
 )
 
 
@@ -44,43 +50,38 @@ class Pi(Agent):
 
     def build_spec(
         self, prompt: str, timeout: int, skills: list[str] = ()
-    ) -> DockerSpec:
-        env: dict[str, str] = {"HOME": "/home/node"}
+    ) -> ExecutionSpec:
+        env: dict[str, str] = {}
         api_key: str | None = None
         if self._model_config.api_key_env:
             if key := os.environ.get(self._model_config.api_key_env):
                 env[self._model_config.api_key_env] = key
                 api_key = key
 
-        setup_parts: list[str] = [_PI_INSTALL]
         requirements = ExecutionRequirements()
-
         if self._model_config.base_url:
-            # Write a Pi models.json so Pi knows how to reach the custom provider.
-            # The model string must be "provider/model-id"; we derive the provider
-            # name from the part before the first slash (e.g. "ollama").
             models_json = _build_models_json(
                 self._model_config.model,
                 self._model_config.base_url,
                 api_key,
             )
-            escaped = models_json.replace("'", "'\\''")
-            setup_parts.append(
-                f"mkdir -p /home/node/.pi/agent"
-                f" && printf '%s' '{escaped}' > /home/node/.pi/agent/models.json"
+            requirements = ExecutionRequirements(
+                host_network_access=True,
+                config_scopes=[
+                    ConfigScope(
+                        env_var="PI_CODING_AGENT_DIR",
+                        files={"models.json": models_json},
+                    )
+                ],
             )
-            requirements = ExecutionRequirements(host_network_access=True)
 
-        return DockerSpec(
+        return ExecutionSpec(
             command=(
                 f"pi --mode json --no-extensions"
                 f" --model {self._model_config.model}"
                 f' "{_esc(prompt)}"'
             ),
-            setup_command=" && ".join(setup_parts),
             env=env,
-            image=_PI_IMAGE,
-            user="node",
             timeout=timeout,
             requirements=requirements,
         )
@@ -122,7 +123,7 @@ class PiHarness:
     """
 
     def with_model(self, config: PiConfig) -> Harness:
-        return Harness(Pi(model_config=config), DockerExecutor())
+        return Harness(Pi(model_config=config), DockerExecutor(_PI_DOCKER_PROFILE))
 
 
 def _build_models_json(model: str, base_url: str, api_key: str | None) -> str:
@@ -164,7 +165,6 @@ def _parse(stdout: str) -> AgentRun:
         event_type = event.get("type")
 
         if event_type == "message_end":
-            # Pi emits message_end for both user and assistant turns; skip user turns.
             message = event.get("message", {})
             if message.get("role") != "assistant":
                 continue

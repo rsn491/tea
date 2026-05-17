@@ -100,4 +100,5 @@ def test_pi_config_api_with_model_str_interface():
     # Ensure the spec is built correctly (host_network_access=True for Ollama)
     spec = harness._agent.build_spec("ping", timeout=30)
     assert spec.requirements.host_network_access is True
-    assert not hasattr(spec, "extra_hosts") or spec.extra_hosts == {}
+    assert len(spec.requirements.config_scopes) == 1
+    assert spec.requirements.config_scopes[0].env_var == "PI_CODING_AGENT_DIR"

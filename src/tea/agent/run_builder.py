@@ -36,20 +36,25 @@ class RunBuilder:
         return self
 
     def run(self) -> AgentRun:
+        agent = self._runner._agent
+        executor = self._runner._executor
+
         tmp_dir: str | None = None
         if self._workdir:
             tmp_dir = tempfile.mkdtemp()
             shutil.copytree(self._workdir, tmp_dir, dirs_exist_ok=True)
         effective_workdir = tmp_dir if tmp_dir else self._workdir
         skills = _discover_skills(self._workdir)
-        text = self._text
-        if skills and effective_workdir:
-            text = self._runner.prepare_skills(text, effective_workdir, skills)
+        text = (
+            agent.prepare_skills(self._text, effective_workdir, skills)
+            if (skills and effective_workdir)
+            else self._text
+        )
         try:
             before = _snapshot(self._workdir)
-            result = self._runner._execute(
-                text, timeout=self._timeout, workdir=effective_workdir, skills=skills
-            )
+            spec = agent.build_spec(text, self._timeout, skills)
+            raw = executor.run(spec, effective_workdir)
+            result = agent.parse(raw)
             after = _snapshot(effective_workdir)
             result._files_changed_fn = lambda: _diff_snapshots(before, after)
         finally:

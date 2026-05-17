@@ -4,8 +4,8 @@ import json
 import os
 import shlex
 
-from tea.executor import DockerSpec, ExecutionRequirements, RawResult
-from tea.executor.docker import DockerExecutor
+from tea.executor import ExecutionSpec, RawResult
+from tea.executor.docker import DockerExecutor, DockerProfile
 
 from .agent import Agent
 from .agent_run import AgentRun, Step, ToolCall
@@ -14,6 +14,15 @@ from .harness import ApiKeyHarness, Harness
 _CLAUDE_IMAGE = "node:22"
 _DEFAULT_MAX_TURNS = 25
 _DEFAULT_MODEL = "claude-haiku-4-5-20251001"
+
+_NPM_PREFIX = "/home/node/.npm-global"
+
+_CLAUDE_DOCKER_PROFILE = DockerProfile(
+    image=_CLAUDE_IMAGE,
+    user="node",
+    setup_command="npm install -g @anthropic-ai/claude-code --quiet 2>/dev/null",
+    env_overrides={"HOME": "/home/node", "NPM_CONFIG_PREFIX": _NPM_PREFIX},
+)
 
 
 class ClaudeCode(Agent):
@@ -27,34 +36,22 @@ class ClaudeCode(Agent):
 
     def build_spec(
         self, prompt: str, timeout: int, skills: list[str] = ()
-    ) -> DockerSpec:
-        npm_prefix = "/home/node/.npm-global"
-        env: dict[str, str] = {"HOME": "/home/node", "NPM_CONFIG_PREFIX": npm_prefix}
+    ) -> ExecutionSpec:
+        env: dict[str, str] = {}
         if key := os.environ.get("ANTHROPIC_API_KEY"):
             env["ANTHROPIC_API_KEY"] = key
         if token := os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"):
             env["CLAUDE_CODE_OAUTH_TOKEN"] = token
 
-        extra_mounts: dict[str, str] = {}
-        host_claude_dir = os.path.expanduser("~/.claude")
-        if os.path.isdir(host_claude_dir):
-            extra_mounts[host_claude_dir] = "/home/node/.claude"
-
-        return DockerSpec(
+        return ExecutionSpec(
             command=(
-                f"{npm_prefix}/bin/claude --dangerously-skip-permissions"
+                f"{_NPM_PREFIX}/bin/claude --dangerously-skip-permissions"
                 f" --model {shlex.quote(self._model)}"
                 f" --max-turns {int(self._max_turns)}"
                 f' --print --output-format stream-json --verbose "{_esc(prompt)}"'
             ),
-            setup_command=(
-                "npm install -g @anthropic-ai/claude-code --quiet 2>/dev/null"
-            ),
             env=env,
-            image=_CLAUDE_IMAGE,
-            user="node",
             timeout=timeout,
-            requirements=ExecutionRequirements(extra_mounts=extra_mounts),
         )
 
     def parse(self, raw: RawResult) -> AgentRun:
@@ -137,7 +134,10 @@ class ClaudeCodeHarness(ApiKeyHarness):
             if isinstance(self._agent, ClaudeCode)
             else _DEFAULT_MAX_TURNS
         )
-        return Harness(ClaudeCode(model=model, max_turns=max_turns), DockerExecutor())
+        return Harness(
+            ClaudeCode(model=model, max_turns=max_turns),
+            DockerExecutor(_CLAUDE_DOCKER_PROFILE),
+        )
 
     def with_api_key(self) -> Harness:
         agent = self._agent
@@ -145,7 +145,10 @@ class ClaudeCodeHarness(ApiKeyHarness):
         max_turns = (
             agent._max_turns if isinstance(agent, ClaudeCode) else _DEFAULT_MAX_TURNS
         )
-        return Harness(ClaudeCode(model=model, max_turns=max_turns), DockerExecutor())
+        return Harness(
+            ClaudeCode(model=model, max_turns=max_turns),
+            DockerExecutor(_CLAUDE_DOCKER_PROFILE),
+        )
 
 
 def _esc(text: str) -> str:

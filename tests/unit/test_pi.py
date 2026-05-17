@@ -25,12 +25,10 @@ def test_build_spec_defaults_no_base_url(monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     spec = Pi(_ANTHROPIC_CFG).build_spec("hello", timeout=60)
 
-    assert spec.image == "node:22"
-    assert spec.user == "node"
     assert spec.timeout == 60
     assert not spec.requirements.host_network_access
-    assert "npm install" in spec.setup_command
-    assert "@earendil-works/pi-coding-agent" in spec.setup_command
+    assert spec.requirements.config_scopes == []
+    assert spec.setup_command is None
     assert "--model anthropic/claude-sonnet-4-6" in spec.command
 
 
@@ -64,13 +62,12 @@ def test_build_spec_with_base_url_writes_models_json(monkeypatch):
     spec = Pi(cfg).build_spec("hi", timeout=30)
 
     assert spec.requirements.host_network_access is True
-    assert "mkdir -p /home/node/.pi/agent" in spec.setup_command
-    assert "models.json" in spec.setup_command
-    # the resolved key from the host env should be baked into the models.json
-    # written to the container — find it inside the printf payload.
-    assert '"apiKey": "sk-cloud-xyz"' in spec.setup_command
-    assert '"baseUrl": "https://ollama.example/v1"' in spec.setup_command
-    assert "models.json" in spec.setup_command
+    assert len(spec.requirements.config_scopes) == 1
+    scope = spec.requirements.config_scopes[0]
+    assert scope.env_var == "PI_CODING_AGENT_DIR"
+    models_json = scope.files["models.json"]
+    assert '"apiKey": "sk-cloud-xyz"' in models_json
+    assert '"baseUrl": "https://ollama.example/v1"' in models_json
 
 
 def test_build_spec_with_base_url_but_no_api_key_env_uses_local(monkeypatch):
@@ -78,7 +75,8 @@ def test_build_spec_with_base_url_but_no_api_key_env_uses_local(monkeypatch):
         "ollama/qwen2.5-coder:1.5b", base_url="http://host.docker.internal:11434/v1"
     )
     spec = Pi(cfg).build_spec("hi", timeout=30)
-    assert '"apiKey": "local"' in spec.setup_command
+    scope = spec.requirements.config_scopes[0]
+    assert '"apiKey": "local"' in scope.files["models.json"]
 
 
 # ── _build_models_json ────────────────────────────────────────────────────────

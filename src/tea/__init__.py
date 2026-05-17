@@ -12,19 +12,19 @@ from tea.checkers import (
     check_skill_used,
 )
 from tea.executor import (
-    DockerSpec,
+    ConfigScope,
     ExecutionRequirements,
     ExecutionSpec,
     Executor,
     RawResult,
 )
-from tea.executor.docker import DockerExecutor
+from tea.executor.docker import DockerExecutor, DockerProfile
 from tea.judge import HarnessJudge, Judge, JudgeResult, external_judge
 from tea.runner import TestRunner, iterations
 
 __all__ = [
-    "Agents",  # catalog — Agents.ClaudeCode / Agents.Pi
-    "Agent",  # ABC for type hints
+    "Agents",
+    "Agent",
     "ClaudeCode",
     "ClaudeCodeHarness",
     "Codex",
@@ -33,10 +33,11 @@ __all__ = [
     "PiConfig",
     "PiHarness",
     "DockerExecutor",
+    "DockerProfile",
     "Executor",
     "ExecutionSpec",
     "ExecutionRequirements",
-    "DockerSpec",
+    "ConfigScope",
     "RawResult",
     "ApiKeyHarness",
     "Harness",
