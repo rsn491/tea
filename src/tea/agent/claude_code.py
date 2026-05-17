@@ -43,7 +43,8 @@ class ClaudeCode(Agent):
         return DockerSpec(
             command=(
                 f"{npm_prefix}/bin/claude --dangerously-skip-permissions"
-                f" --model {shlex.quote(self._model)} --max-turns {int(self._max_turns)}"
+                f" --model {shlex.quote(self._model)}"
+                f" --max-turns {int(self._max_turns)}"
                 f' --print --output-format stream-json --verbose "{_esc(prompt)}"'
             ),
             setup_command=(
