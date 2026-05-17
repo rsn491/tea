@@ -85,6 +85,76 @@ The agent that executes your task runs inside Docker. Configure it via:
 
 ---
 
+## GitHub Actions
+
+tea ships a reusable workflow you can call from any repo. It handles Python setup, Docker, and artifact upload — you bring the tests and credentials.
+
+### Quickstart
+
+Create `.github/workflows/agent-tests.yml` in your repo:
+
+```yaml
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  agent-tests:
+    uses: rsn491/tea/.github/workflows/harntest.yml@main
+    with:
+      test-path: examples/agent-tests
+      iterations: 3
+    secrets: inherit
+```
+
+`secrets: inherit` forwards your repo's secrets into the workflow automatically — no per-secret mapping needed.
+
+### Inputs
+
+| Input | Required | Default | Description |
+|---|---|---|---|
+| `test-path` | yes | — | Path to test directory or file |
+| `iterations` | no | `1` | Times to run each test |
+
+### Wiring credentials
+
+Add secrets in your repo's **Settings → Secrets and variables → Actions**. Which secrets you need depends on your agent backend:
+
+| Backend | Secret(s) to add |
+|---|---|
+| ClaudeCode (OAuth) | `CLAUDE_CODE_OAUTH_TOKEN` |
+| ClaudeCode (API key) | `ANTHROPIC_API_KEY` |
+| Codex | `OPENAI_API_KEY` |
+| Pi + cloud provider | e.g. `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` |
+| Pi + self-hosted (Ollama, vLLM) | `PI_API_KEY`, `PI_BASE_URL`, `PI_MODEL` |
+
+Your test file reads whatever it needs from the environment:
+
+```python
+import os
+from tea import Agents, check_diff_added
+from tea.agent.pi import PiConfig
+
+def test_add_feature():
+    run = (
+        Agents.Pi
+        .with_model(PiConfig(
+            model=os.environ["PI_MODEL"],
+            api_key_env="PI_API_KEY",
+            base_url=os.environ.get("PI_BASE_URL"),
+        ))
+        .prompt("Add 'minus' operation to the calculator")
+        .workdir("examples/demo_calculator")
+        .run()
+    )
+    check_diff_added(run, "calculator.py", "minus")
+```
+
+The workflow uploads the full tea output as a `tea-test-output` artifact on every run, including failures.
+
+---
+
 ## Development
 
 ```bash
