@@ -10,6 +10,8 @@ Run with:
 
 from __future__ import annotations
 
+import urllib.request
+
 import docker
 import pytest
 
@@ -27,8 +29,6 @@ def _docker_available() -> bool:
 
 
 def _ollama_available() -> bool:
-    import urllib.request
-
     try:
         with urllib.request.urlopen(
             "http://localhost:11434/api/tags", timeout=3

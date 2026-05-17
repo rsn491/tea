@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import os
+import tempfile
 from unittest.mock import patch
 
 from tea.agent import Agents
-from tea.agent.claude_code import ClaudeCode, ClaudeCodeHarness
+from tea.agent.claude_code import _CLAUDE_DOCKER_PROFILE, ClaudeCode, ClaudeCodeHarness
 from tea.agent.codex import Codex
 from tea.agent.harness import Harness
 from tea.agent.pi import Pi, PiConfig, PiHarness
@@ -129,8 +131,6 @@ def test_config_scope_mounts_host_tmp_at_container_path():
 
 
 def test_config_scope_files_written_before_container_runs():
-    import os
-
     written: dict[str, str] = {}
     scope = ConfigScope(env_var="MY_DIR", files={"settings.json": '{"ok": true}'})
     spec = ExecutionSpec(
@@ -173,8 +173,6 @@ def test_config_scope_multiple_scopes_get_sequential_paths():
 
 
 def test_config_scope_tmp_dir_cleaned_up_after_run(tmp_path):
-    import tempfile
-
     created_tmps: list[str] = []
     original_mkdtemp = tempfile.mkdtemp
 
@@ -194,8 +192,6 @@ def test_config_scope_tmp_dir_cleaned_up_after_run(tmp_path):
             "tea.executor.docker.tempfile.mkdtemp", side_effect=tracking_mkdtemp
         ):
             DockerExecutor(DockerProfile(image="node:22")).run(spec, workdir=None)
-
-    import os
 
     for path in created_tmps:
         assert not os.path.exists(path), f"tmp dir {path} was not cleaned up"
@@ -311,8 +307,6 @@ def test_claude_code_harness_with_model_sets_model():
 
 
 def test_claude_code_harness_with_model_preserves_max_turns():
-    from tea.agent.claude_code import _CLAUDE_DOCKER_PROFILE
-
     base = ClaudeCodeHarness(
         ClaudeCode(max_turns=5), DockerExecutor(_CLAUDE_DOCKER_PROFILE)
     )
