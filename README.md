@@ -133,7 +133,7 @@ Add secrets in your repo's **Settings → Secrets and variables → Actions**. W
 | ClaudeCode (API key) | `ANTHROPIC_API_KEY` |
 | Codex | `OPENAI_API_KEY` |
 | Pi + cloud provider | e.g. `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` |
-| Pi + self-hosted (Ollama, vLLM) | `PI_API_KEY`, `PI_BASE_URL`, `PI_MODEL` |
+| Pi + self-hosted (Ollama, vLLM) | secret: `MODEL_PROVIDER_KEY`; variables: `MODEL_PROVIDER_MODEL`, `MODEL_PROVIDER_BASE_URL` |
 
 Your test file reads whatever it needs from the environment:
 
