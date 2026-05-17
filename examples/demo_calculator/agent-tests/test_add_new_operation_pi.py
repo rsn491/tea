@@ -14,7 +14,8 @@ unified diff via check_diff_added rather than check_skill_used.
 
 import os
 
-from tea import Agents, ModelConfig, check, check_diff_added
+from tea import Agents, check, check_diff_added
+from tea.agent.pi import PiConfig
 from tea.runner import iterations
 
 _MODEL = os.environ["MODEL_PROVIDER_MODEL"]
@@ -22,7 +23,7 @@ _BASE_URL = os.environ["MODEL_PROVIDER_BASE_URL"].rstrip("/") + "/v1"
 _API_KEY_ENV = "MODEL_PROVIDER_KEY"
 
 _pi = Agents.Pi.with_model(
-    ModelConfig(_MODEL, api_key_env=_API_KEY_ENV, base_url=_BASE_URL)
+    PiConfig(_MODEL, api_key_env=_API_KEY_ENV, base_url=_BASE_URL)
 )
 
 
