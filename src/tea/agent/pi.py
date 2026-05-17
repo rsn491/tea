@@ -2,20 +2,44 @@ from __future__ import annotations
 
 import json
 import os
+from dataclasses import dataclass
 
-from tea.executor import DockerSpec, RawResult
+from tea.executor import DockerSpec, ExecutionRequirements, RawResult
 from tea.executor.docker import DockerExecutor
 
 from .agent import Agent
 from .agent_run import AgentRun, Step, ToolCall
 from .harness import Harness
-from .model_config import ModelConfig
 
 _PI_IMAGE = "node:22"
+_PI_PREFIX = "/home/node/.npm-global"
+# Install into ~/.npm-global (writable by the node user) and add to PATH.
+_PI_INSTALL = (
+    f"mkdir -p {_PI_PREFIX}"
+    f" && npm install --prefix {_PI_PREFIX} @earendil-works/pi-coding-agent"
+    f" --quiet --no-progress >/dev/null 2>&1"
+    f" && export PATH={_PI_PREFIX}/node_modules/.bin:$PATH"
+)
+
+
+@dataclass
+class PiConfig:
+    """Pi-specific model configuration.
+
+    model:       "provider/model-id" string (e.g. "anthropic/claude-sonnet-4-6")
+    api_key_env: name of the host env var to forward into the container
+    base_url:    OpenAI-compatible endpoint — only needed for non-native providers
+                 (Ollama, vLLM, LM Studio).  Native cloud providers (Anthropic,
+                 OpenAI, Gemini, etc.) are known to Pi without a base_url.
+    """
+
+    model: str
+    api_key_env: str | None = None
+    base_url: str | None = None
 
 
 class Pi(Agent):
-    def __init__(self, model_config: ModelConfig) -> None:
+    def __init__(self, model_config: PiConfig) -> None:
         self._model_config = model_config
 
     def build_spec(
@@ -28,8 +52,8 @@ class Pi(Agent):
                 env[self._model_config.api_key_env] = key
                 api_key = key
 
-        extra_hosts: dict[str, str] = {}
-        setup_command: str | None = None
+        setup_parts: list[str] = [_PI_INSTALL]
+        requirements = ExecutionRequirements()
 
         if self._model_config.base_url:
             # Write a Pi models.json so Pi knows how to reach the custom provider.
@@ -41,11 +65,11 @@ class Pi(Agent):
                 api_key,
             )
             escaped = models_json.replace("'", "'\\''")
-            setup_command = (
+            setup_parts.append(
                 f"mkdir -p /home/node/.pi/agent"
                 f" && printf '%s' '{escaped}' > /home/node/.pi/agent/models.json"
             )
-            extra_hosts["host.docker.internal"] = "host-gateway"
+            requirements = ExecutionRequirements(host_network_access=True)
 
         return DockerSpec(
             command=(
@@ -53,12 +77,12 @@ class Pi(Agent):
                 f" --model {self._model_config.model}"
                 f' "{_esc(prompt)}"'
             ),
-            setup_command=setup_command,
+            setup_command=" && ".join(setup_parts),
             env=env,
             image=_PI_IMAGE,
             user="node",
             timeout=timeout,
-            extra_hosts=extra_hosts,
+            requirements=requirements,
         )
 
     def prepare_skills(self, prompt: str, workdir: str, skills: list[str]) -> str:
@@ -91,13 +115,13 @@ class PiHarness:
     """Factory for Pi runs.
 
     Exposes only ``with_model()``: Pi has no default model and no OAuth/api-key
-    fallback path, so a ``ModelConfig`` must always be supplied externally.
+    fallback path, so a ``PiConfig`` must always be supplied externally.
     Because ``PiHarness`` does not inherit ``Harness``, ``Agents.Pi.prompt(...)``
     is a static type error — the only valid entry point is
     ``Agents.Pi.with_model(config).prompt(...)``.
     """
 
-    def with_model(self, config: ModelConfig) -> Harness:
+    def with_model(self, config: PiConfig) -> Harness:
         return Harness(Pi(model_config=config), DockerExecutor())
 
 

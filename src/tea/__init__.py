@@ -4,15 +4,20 @@ from tea.agent.agent_run import AgentRun, FileChange, FileDiff, Step, ToolCall
 from tea.agent.claude_code import ClaudeCode, ClaudeCodeHarness
 from tea.agent.codex import Codex, CodexHarness
 from tea.agent.harness import ApiKeyHarness, Harness
-from tea.agent.model_config import ModelConfig
-from tea.agent.pi import Pi, PiHarness
+from tea.agent.pi import Pi, PiConfig, PiHarness
 from tea.checkers import (
     check,
     check_diff_added,
     check_judge_task,
     check_skill_used,
 )
-from tea.executor import DockerSpec, ExecutionSpec, Executor, RawResult
+from tea.executor import (
+    DockerSpec,
+    ExecutionRequirements,
+    ExecutionSpec,
+    Executor,
+    RawResult,
+)
 from tea.executor.docker import DockerExecutor
 from tea.judge import HarnessJudge, Judge, JudgeResult, external_judge
 from tea.runner import TestRunner, iterations
@@ -25,11 +30,12 @@ __all__ = [
     "Codex",
     "CodexHarness",
     "Pi",
+    "PiConfig",
     "PiHarness",
-    "ModelConfig",
     "DockerExecutor",
     "Executor",
     "ExecutionSpec",
+    "ExecutionRequirements",
     "DockerSpec",
     "RawResult",
     "ApiKeyHarness",

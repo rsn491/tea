@@ -5,11 +5,16 @@ import json
 import pytest
 
 from tea.agent.agent_run import AgentRun
-from tea.agent.model_config import ModelConfig
-from tea.agent.pi import Pi, PiHarness, _build_models_json, _read_skill_description
+from tea.agent.pi import (
+    Pi,
+    PiConfig,
+    PiHarness,
+    _build_models_json,
+    _read_skill_description,
+)
 from tea.executor import RawResult
 
-_ANTHROPIC_CFG = ModelConfig(
+_ANTHROPIC_CFG = PiConfig(
     "anthropic/claude-sonnet-4-6", api_key_env="ANTHROPIC_API_KEY"
 )
 
@@ -23,8 +28,9 @@ def test_build_spec_defaults_no_base_url(monkeypatch):
     assert spec.image == "node:22"
     assert spec.user == "node"
     assert spec.timeout == 60
-    assert spec.extra_hosts == {}
-    assert spec.setup_command is None
+    assert not spec.requirements.host_network_access
+    assert "npm install" in spec.setup_command
+    assert "@earendil-works/pi-coding-agent" in spec.setup_command
     assert "--model anthropic/claude-sonnet-4-6" in spec.command
 
 
@@ -42,7 +48,7 @@ def test_build_spec_no_api_key_env_when_unset(monkeypatch):
 
 def test_build_spec_api_key_env_set_but_missing_from_environ(monkeypatch):
     monkeypatch.delenv("MISSING_KEY", raising=False)
-    spec = Pi(ModelConfig("foo/bar", api_key_env="MISSING_KEY")).build_spec(
+    spec = Pi(PiConfig("foo/bar", api_key_env="MISSING_KEY")).build_spec(
         "hi", timeout=30
     )
     assert "MISSING_KEY" not in spec.env
@@ -50,14 +56,14 @@ def test_build_spec_api_key_env_set_but_missing_from_environ(monkeypatch):
 
 def test_build_spec_with_base_url_writes_models_json(monkeypatch):
     monkeypatch.setenv("PROVIDER_KEY", "sk-cloud-xyz")
-    cfg = ModelConfig(
+    cfg = PiConfig(
         "ollama/qwen2.5-coder:1.5b",
         api_key_env="PROVIDER_KEY",
         base_url="https://ollama.example/v1",
     )
     spec = Pi(cfg).build_spec("hi", timeout=30)
 
-    assert spec.extra_hosts == {"host.docker.internal": "host-gateway"}
+    assert spec.requirements.host_network_access is True
     assert "mkdir -p /home/node/.pi/agent" in spec.setup_command
     assert "models.json" in spec.setup_command
     # the resolved key from the host env should be baked into the models.json
@@ -68,7 +74,7 @@ def test_build_spec_with_base_url_writes_models_json(monkeypatch):
 
 
 def test_build_spec_with_base_url_but_no_api_key_env_uses_local(monkeypatch):
-    cfg = ModelConfig(
+    cfg = PiConfig(
         "ollama/qwen2.5-coder:1.5b", base_url="http://host.docker.internal:11434/v1"
     )
     spec = Pi(cfg).build_spec("hi", timeout=30)
@@ -109,7 +115,7 @@ def test_build_models_json_defaults_to_local_when_no_key():
 
 
 def test_pi_harness_with_model_threads_config_through():
-    new = PiHarness().with_model(ModelConfig("ollama/x", base_url="http://h/v1"))
+    new = PiHarness().with_model(PiConfig("ollama/x", base_url="http://h/v1"))
     inner = new._agent  # type: ignore[attr-defined]
     assert isinstance(inner, Pi)
     assert inner._model_config.model == "ollama/x"

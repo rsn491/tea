@@ -4,8 +4,8 @@ from .agent import Agent as Agent
 from .claude_code import ClaudeCode, ClaudeCodeHarness
 from .codex import Codex, CodexHarness
 from .harness import Harness as Harness
-from .model_config import ModelConfig as ModelConfig
 from .pi import Pi as Pi
+from .pi import PiConfig as PiConfig
 from .pi import PiHarness
 from .run_builder import RunBuilder as RunBuilder
 

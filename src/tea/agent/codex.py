@@ -49,6 +49,9 @@ class Codex(Agent):
 
 
 class CodexHarness(ApiKeyHarness):
+    def with_model(self, model: str) -> Harness:
+        return Harness(Codex(model=model), DockerExecutor())
+
     def with_api_key(self) -> Harness:
         model = self._agent._model if isinstance(self._agent, Codex) else _DEFAULT_MODEL
         return Harness(Codex(model=model), DockerExecutor())

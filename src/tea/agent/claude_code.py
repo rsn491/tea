@@ -4,7 +4,7 @@ import json
 import os
 import shlex
 
-from tea.executor import DockerSpec, RawResult
+from tea.executor import DockerSpec, ExecutionRequirements, RawResult
 from tea.executor.docker import DockerExecutor
 
 from .agent import Agent
@@ -35,10 +35,10 @@ class ClaudeCode(Agent):
         if token := os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"):
             env["CLAUDE_CODE_OAUTH_TOKEN"] = token
 
-        extra_volumes: dict[str, str] = {}
+        extra_mounts: dict[str, str] = {}
         host_claude_dir = os.path.expanduser("~/.claude")
         if os.path.isdir(host_claude_dir):
-            extra_volumes[host_claude_dir] = "/home/node/.claude"
+            extra_mounts[host_claude_dir] = "/home/node/.claude"
 
         return DockerSpec(
             command=(
@@ -54,7 +54,7 @@ class ClaudeCode(Agent):
             image=_CLAUDE_IMAGE,
             user="node",
             timeout=timeout,
-            extra_volumes=extra_volumes,
+            requirements=ExecutionRequirements(extra_mounts=extra_mounts),
         )
 
     def parse(self, raw: RawResult) -> AgentRun:
@@ -131,6 +131,14 @@ class ClaudeCode(Agent):
 
 
 class ClaudeCodeHarness(ApiKeyHarness):
+    def with_model(self, model: str) -> Harness:
+        max_turns = (
+            self._agent._max_turns
+            if isinstance(self._agent, ClaudeCode)
+            else _DEFAULT_MAX_TURNS
+        )
+        return Harness(ClaudeCode(model=model, max_turns=max_turns), DockerExecutor())
+
     def with_api_key(self) -> Harness:
         agent = self._agent
         model = agent._model if isinstance(agent, ClaudeCode) else _DEFAULT_MODEL
