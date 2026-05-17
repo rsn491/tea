@@ -58,16 +58,17 @@ jobs:
           files: coverage.xml
           fail_ci_if_error: false
 
-  pip-audit:
+  changes:
     runs-on: ubuntu-latest
-
+    outputs:
+      uv_lock: ${{ steps.diff.outputs.lockfile }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Check if uv.lock changed
-        id: changes
+        id: diff
         run: |
           base="${{ github.event.pull_request.base.sha || github.event.before }}"
           if [[ "$base" =~ ^0+$ ]] || [ -z "$base" ]; then
@@ -78,10 +79,16 @@ jobs:
             echo "lockfile=false" >> "$GITHUB_OUTPUT"
           fi
 
+  pip-audit:
+    needs: changes
+    if: needs.changes.outputs.uv_lock == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
       - name: Install uv
-        if: steps.changes.outputs.lockfile == 'true'
         uses: astral-sh/setup-uv@v5
 
       - name: Run pip-audit
-        if: steps.changes.outputs.lockfile == 'true'
         run: uvx pip-audit
