@@ -10,7 +10,6 @@ Test and evaluation tool for agentic workflows. Run an agent against a task, ass
 
 - Python 3.11+
 - Docker
-- A Claude Code OAuth token (`CLAUDE_CODE_OAUTH_TOKEN`)
 
 ### Install
 
