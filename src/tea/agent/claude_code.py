@@ -24,9 +24,10 @@ class ClaudeCode(Agent):
         self._model = model
         self._max_turns = max_turns
 
-    def build_spec(self, prompt: str, timeout: int) -> DockerSpec:
-        npm_prefix = "/home/node/.npm-global"
-        env: dict[str, str] = {"HOME": "/home/node", "NPM_CONFIG_PREFIX": npm_prefix}
+    def build_spec(
+        self, prompt: str, timeout: int, skills: list[str] = ()
+    ) -> DockerSpec:
+        env: dict[str, str] = {"HOME": "/home/node"}
         if key := os.environ.get("ANTHROPIC_API_KEY"):
             env["ANTHROPIC_API_KEY"] = key
         if token := os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"):
@@ -39,12 +40,9 @@ class ClaudeCode(Agent):
 
         return DockerSpec(
             command=(
-                f"{npm_prefix}/bin/claude --dangerously-skip-permissions"
+                f"claude --dangerously-skip-permissions"
                 f" --model {self._model} --max-turns {self._max_turns}"
                 f' --print --output-format stream-json --verbose "{_esc(prompt)}"'
-            ),
-            setup_command=(
-                "npm install -g @anthropic-ai/claude-code --quiet 2>/dev/null"
             ),
             env=env,
             image=_CLAUDE_IMAGE,

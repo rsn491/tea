@@ -22,8 +22,13 @@ class Harness:
 
         return RunBuilder.prompt(self, text, timeout=timeout)
 
-    def _execute(self, text: str, *, timeout: int, workdir: str | None) -> AgentRun:
-        spec = self._agent.build_spec(text, timeout)
+    def prepare_skills(self, prompt: str, workdir: str, skills: list[str]) -> str:
+        return self._agent.prepare_skills(prompt, workdir, skills)
+
+    def _execute(
+        self, text: str, *, timeout: int, workdir: str | None, skills: list[str] = ()
+    ) -> AgentRun:
+        spec = self._agent.build_spec(text, timeout, skills)
         raw = self._executor.run(spec, workdir)
         return self._agent.parse(raw)
 
