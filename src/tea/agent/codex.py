@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import json
 import os
 import shlex
 
-from tea.executor import ExecutionSpec, RawResult
+from tea.executor import ConfigScope, ExecutionRequirements, ExecutionSpec, RawResult
 from tea.executor.docker import DockerExecutor, DockerProfile
 
 from .agent import Agent
@@ -12,11 +13,13 @@ from .harness import ApiKeyHarness, Harness
 
 _CODEX_IMAGE = "node:22"
 _DEFAULT_MODEL = "gpt-5.3-codex"
+_NPM_PREFIX = "/home/node/.npm-global"
 
 _CODEX_DOCKER_PROFILE = DockerProfile(
     image=_CODEX_IMAGE,
     user="node",
-    env_overrides={"HOME": "/home/node"},
+    setup_command="npm install -g @openai/codex --quiet 2>/dev/null",
+    env_overrides={"HOME": "/home/node", "NPM_CONFIG_PREFIX": _NPM_PREFIX},
 )
 
 
@@ -28,11 +31,29 @@ class Codex(Agent):
         self, prompt: str, timeout: int, skills: list[str] = ()
     ) -> ExecutionSpec:
         env: dict[str, str] = {}
+        config_scopes: list[ConfigScope] = []
+
+        auth_path = os.path.expanduser("~/.codex/auth.json")
+        if os.path.isfile(auth_path):
+            try:
+                with open(auth_path, encoding="utf-8") as fh:
+                    auth_content = fh.read()
+                json.loads(auth_content)  # validate
+                config_scopes.append(
+                    ConfigScope(
+                        env_var="CODEX_HOME",
+                        files={"auth.json": auth_content},
+                    )
+                )
+            except (OSError, json.JSONDecodeError):
+                pass
+
         if api_key := os.environ.get("OPENAI_API_KEY"):
             env["OPENAI_API_KEY"] = api_key
+
         return ExecutionSpec(
             command=(
-                f"codex exec"
+                f"{_NPM_PREFIX}/bin/codex exec"
                 f" --dangerously-bypass-approvals-and-sandbox"
                 f" --skip-git-repo-check --ephemeral"
                 f" -m {shlex.quote(self._model)}"
@@ -41,6 +62,7 @@ class Codex(Agent):
             env=env,
             timeout=timeout,
             setup_command=_skill_setup(skills) if skills else None,
+            requirements=ExecutionRequirements(config_scopes=config_scopes),
         )
 
     def parse(self, raw: RawResult) -> AgentRun:
@@ -62,13 +84,13 @@ class CodexHarness(ApiKeyHarness):
 
 
 def _skill_setup(skills: list[str]) -> str:
-    """Shell commands to install skills into ~/.codex/skills/ inside the container."""
+    """Install skills into $CODEX_HOME/skills/ inside the container."""
     cmds = []
     for name in skills:
         quoted = shlex.quote(name)
         src = f"/workspace/.claude/skills/{quoted}/SKILL.md"
-        dst_dir = f"/home/node/.codex/skills/{quoted}"
-        cmds.append(f"mkdir -p {dst_dir} && cp {src} {dst_dir}/SKILL.md")
+        dst = f'"$CODEX_HOME"/skills/{quoted}'
+        cmds.append(f"mkdir -p {dst} && cp {src} {dst}/SKILL.md")
     return " && ".join(cmds)
 
 

@@ -55,10 +55,10 @@ def test_codex_build_spec_with_skills_has_mkdir_and_cp(monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     spec = Codex().build_spec("do stuff", 60, ["add-new-operation"])
 
-    assert "mkdir -p /home/node/.codex/skills/add-new-operation" in spec.setup_command
+    assert 'mkdir -p "$CODEX_HOME"/skills/add-new-operation' in spec.setup_command
     assert (
         "cp /workspace/.claude/skills/add-new-operation/SKILL.md"
-        " /home/node/.codex/skills/add-new-operation/SKILL.md"
+        ' "$CODEX_HOME"/skills/add-new-operation/SKILL.md'
     ) in spec.setup_command
 
 

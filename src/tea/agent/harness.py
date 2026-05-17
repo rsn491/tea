@@ -19,6 +19,8 @@ class Harness:
         self._executor = executor
 
     def prompt(self, text: str, *, timeout: int = 300) -> RunBuilder:
+        from .run_builder import RunBuilder  # noqa: PLC0415
+
         return RunBuilder.prompt(self, text, timeout=timeout)
 
 

@@ -41,6 +41,7 @@ class DockerExecutor(Executor):
                 os.makedirs(os.path.dirname(abs_path), exist_ok=True)
                 with open(abs_path, "w", encoding="utf-8") as fh:
                     fh.write(content)
+            os.chmod(tmp, 0o777)
             container_path = f"/tmp/tea-scope-{i}"
             volumes[tmp] = container_path
             env[scope.env_var] = container_path
