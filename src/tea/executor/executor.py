@@ -5,26 +5,24 @@ from dataclasses import dataclass, field
 
 
 @dataclass
-class ExecutionSpec:
-    """Environment-agnostic execution spec. Extend for executor-specific fields."""
-
-    command: str
-    env: dict[str, str] = field(default_factory=dict)
-    timeout: int = 300
+class ConfigScope:
+    env_var: str
+    files: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
-class DockerSpec(ExecutionSpec):
-    """ExecutionSpec extended with Docker-specific fields."""
+class ExecutionRequirements:
+    host_network_access: bool = False
+    config_scopes: list[ConfigScope] = field(default_factory=list)
 
-    image: str = ""
+
+@dataclass
+class ExecutionSpec:
+    command: str
+    env: dict[str, str] = field(default_factory=dict)
+    timeout: int = 300
     setup_command: str | None = None
-    user: str | None = None
-    extra_volumes: dict[str, str] = field(default_factory=dict)
-
-    def __post_init__(self) -> None:
-        if not self.image:
-            raise ValueError("DockerSpec.image must be set")
+    requirements: ExecutionRequirements = field(default_factory=ExecutionRequirements)
 
 
 @dataclass

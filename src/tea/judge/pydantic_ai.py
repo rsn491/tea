@@ -5,7 +5,10 @@ import os
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 from pydantic_ai.models import Model
+from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.providers.openai import OpenAIProvider
 
+from .harness_judge import HarnessJudge
 from .judge import Judge, JudgeResult
 
 
@@ -34,8 +37,6 @@ class PydanticAIJudge(Judge):
 
 
 def default_judge() -> Judge:
-    from .harness_judge import HarnessJudge
-
     return HarnessJudge()
 
 
@@ -77,12 +78,7 @@ def _validate_env(
 def _resolve_model(
     model: str, *, base_url: str | None, api_key: str | None
 ) -> Model | str:
-    # When base_url is set, use an OpenAI-compatible client so any local server
-    # (Ollama, vLLM, LM Studio) works regardless of the provider prefix in `model`.
     if base_url:
-        from pydantic_ai.models.openai import OpenAIChatModel
-        from pydantic_ai.providers.openai import OpenAIProvider
-
         return OpenAIChatModel(
             model,
             provider=OpenAIProvider(base_url=base_url, api_key=api_key),

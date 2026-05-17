@@ -4,20 +4,28 @@ import difflib
 import os
 import shutil
 import tempfile
+from typing import Protocol
 
 from tea._context import _active_collector
 from tea.tui.metrics import print_metrics
 
 from .agent_run import AgentRun, FileChange, FileDiff
-from .harness import Harness
+
+
+class _Runnable(Protocol):
+    def _execute(
+        self, text: str, *, timeout: int, workdir: str | None, skills: list[str]
+    ) -> AgentRun: ...
+
+    def prepare_skills(self, prompt: str, workdir: str, skills: list[str]) -> str: ...
 
 
 class RunBuilder:
     @classmethod
-    def prompt(cls, runner: Harness, text: str, *, timeout: int = 300) -> RunBuilder:
+    def prompt(cls, runner: _Runnable, text: str, *, timeout: int = 300) -> RunBuilder:
         return cls(runner, text, timeout)
 
-    def __init__(self, runner: Harness, text: str, timeout: int) -> None:
+    def __init__(self, runner: _Runnable, text: str, timeout: int) -> None:
         self._runner = runner
         self._text = text
         self._timeout = timeout
@@ -28,16 +36,25 @@ class RunBuilder:
         return self
 
     def run(self) -> AgentRun:
+        agent = self._runner._agent
+        executor = self._runner._executor
+
         tmp_dir: str | None = None
         if self._workdir:
             tmp_dir = tempfile.mkdtemp()
             shutil.copytree(self._workdir, tmp_dir, dirs_exist_ok=True)
         effective_workdir = tmp_dir if tmp_dir else self._workdir
+        skills = _discover_skills(self._workdir)
+        text = (
+            agent.prepare_skills(self._text, effective_workdir, skills)
+            if (skills and effective_workdir)
+            else self._text
+        )
         try:
             before = _snapshot(self._workdir)
-            result = self._runner._execute(
-                self._text, timeout=self._timeout, workdir=effective_workdir
-            )
+            spec = agent.build_spec(text, self._timeout, skills)
+            raw = executor.run(spec, effective_workdir)
+            result = agent.parse(raw)
             after = _snapshot(effective_workdir)
             result._files_changed_fn = lambda: _diff_snapshots(before, after)
         finally:
@@ -53,6 +70,19 @@ class RunBuilder:
 
 
 # helpers
+
+
+def _discover_skills(workdir: str | None) -> list[str]:
+    if not workdir:
+        return []
+    skills_dir = os.path.join(workdir, ".claude", "skills")
+    if not os.path.isdir(skills_dir):
+        return []
+    return [
+        entry.name
+        for entry in os.scandir(skills_dir)
+        if entry.is_dir() and os.path.isfile(os.path.join(entry.path, "SKILL.md"))
+    ]
 
 
 def _snapshot(path: str | None) -> dict[str, str]:
