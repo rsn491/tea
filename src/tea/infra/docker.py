@@ -15,6 +15,7 @@ class DockerRunConfig:
     volumes: dict[str, str] = field(default_factory=dict)  # {host_path: container_path}
     container_workdir: str | None = None
     user: str | None = None
+    extra_hosts: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -38,6 +39,7 @@ def run_in_docker(config: DockerRunConfig) -> DockerRunResult:
         volumes=volume_binds or None,
         working_dir=config.container_workdir,
         user=config.user,
+        extra_hosts=config.extra_hosts or None,
         detach=True,
         remove=False,
     )

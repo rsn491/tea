@@ -25,6 +25,7 @@ class DockerExecutor(Executor):
             volumes=volumes,
             container_workdir=container_cwd,
             user=spec.user,
+            extra_hosts=spec.extra_hosts,
         )
         r = run_in_docker(config)
         return RawResult(r.stdout, r.stderr, r.exit_code, r.duration_s)

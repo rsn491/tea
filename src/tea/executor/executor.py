@@ -21,6 +21,7 @@ class DockerSpec(ExecutionSpec):
     setup_command: str | None = None
     user: str | None = None
     extra_volumes: dict[str, str] = field(default_factory=dict)
+    extra_hosts: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not self.image:
