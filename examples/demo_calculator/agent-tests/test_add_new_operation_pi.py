@@ -19,7 +19,7 @@ from tea.agent.pi import PiConfig
 from tea.runner import iterations
 
 _MODEL = os.environ["MODEL_PROVIDER_MODEL"]
-_BASE_URL = os.environ["MODEL_PROVIDER_BASE_URL"].rstrip("/") + "/v1"
+_BASE_URL = os.environ["MODEL_PROVIDER_BASE_URL"]
 _API_KEY_ENV = "MODEL_PROVIDER_KEY"
 
 _pi = Agents.Pi.with_model(
