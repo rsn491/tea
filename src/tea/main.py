@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 from collections.abc import Sequence
 
@@ -23,6 +24,12 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="N",
         help="number of times to run each test (default: 1)",
     )
+    parser.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="enable debug logging (agent raw output, etc.)",
+    )
     return parser
 
 
@@ -33,6 +40,13 @@ def main(argv: Sequence[str] | None = None) -> None:
     if args.target is None:
         parser.print_help()
         return
+
+    level = logging.DEBUG if args.verbose else logging.WARNING
+    logging.basicConfig(
+        level=level,
+        format="%(levelname)s [%(name)s] %(message)s",
+        stream=sys.stderr,
+    )
 
     print_banner()
     try:

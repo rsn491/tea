@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import logging
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -11,6 +12,8 @@ from tea._context import _active_checks, _active_collector
 from tea.agent.agent_run import AgentRun
 from tea.tui import _cyan, _dim, _Spinner
 from tea.tui.runner_view import print_test_header, print_test_results
+
+_log = logging.getLogger("tea")
 
 
 def discover_test_files(path: Path) -> list[Path]:
@@ -111,6 +114,14 @@ class TestRunner:
                     finally:
                         _active_collector.reset(c_token)
                         _active_checks.reset(ch_token)
+                for run in collector:
+                    _log.debug("agent raw output:\n%s", run.raw)
+                    if run.exit_code != 0 and run.stderr:
+                        _log.warning(
+                            "agent exited %d, stderr:\n%s",
+                            run.exit_code,
+                            run.stderr,
+                        )
                 all_runs.extend(collector)
                 for check_label, passed in checks:
                     check_results[check_label].append(passed)
