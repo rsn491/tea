@@ -19,6 +19,7 @@ class DockerSpec(ExecutionSpec):
 
     image: str = ""
     setup_command: str | None = None
+    dockerfile: str | None = None
     user: str | None = None
     extra_volumes: dict[str, str] = field(default_factory=dict)
     extra_hosts: dict[str, str] = field(default_factory=dict)

@@ -11,7 +11,12 @@ from .agent import Agent
 from .agent_run import AgentRun, Step, ToolCall
 from .harness import ApiKeyHarness, Harness
 
-_CLAUDE_IMAGE = "node:22"
+_CLAUDE_IMAGE = "tea-claude-code:latest"
+_CLAUDE_DOCKERFILE = (
+    "FROM node:22\n"
+    "ENV NPM_CONFIG_PREFIX=/home/node/.npm-global\n"
+    "RUN npm install -g @anthropic-ai/claude-code --quiet 2>/dev/null\n"
+)
 _DEFAULT_MAX_TURNS = 25
 _DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 
@@ -47,9 +52,7 @@ class ClaudeCode(Agent):
                 f" --max-turns {int(self._max_turns)}"
                 f' --print --output-format stream-json --verbose "{_esc(prompt)}"'
             ),
-            setup_command=(
-                "npm install -g @anthropic-ai/claude-code --quiet 2>/dev/null"
-            ),
+            dockerfile=_CLAUDE_DOCKERFILE,
             env=env,
             image=_CLAUDE_IMAGE,
             user="node",
