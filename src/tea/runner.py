@@ -60,12 +60,18 @@ def run(target: str, default_iterations: int = 1) -> None:
         sys.exit(1)
 
     last_file: Path | None = None
+    all_passed = True
     for file_path, fn in test_cases:
         if file_path != last_file:
             print(f"  {_cyan('──')} {_dim(str(file_path))}")
             last_file = file_path
         n = getattr(fn, "_tea_iterations", default_iterations)
-        TestRunner(iterations=n).run(fn)
+        passed = TestRunner(iterations=n).run(fn)
+        if not passed:
+            all_passed = False
+
+    if not all_passed:
+        sys.exit(1)
 
 
 def iterations(n: int) -> Callable:
@@ -82,7 +88,7 @@ class TestRunner:
     def __init__(self, iterations: int = 1) -> None:
         self._iterations = iterations
 
-    def run(self, test_fn: Callable[[], None]) -> None:
+    def run(self, test_fn: Callable[[], None]) -> bool:
         name = getattr(test_fn, "__name__", repr(test_fn))
         print_test_header(name, self._iterations)
 
@@ -114,3 +120,6 @@ class TestRunner:
             raise
 
         print_test_results(check_results, all_runs, run_errors, self._iterations)
+        return not run_errors and all(
+            all(results) for results in check_results.values()
+        )

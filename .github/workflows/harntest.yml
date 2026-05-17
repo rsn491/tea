@@ -30,6 +30,13 @@ jobs:
           pip install .
 
       - name: Run agent tests
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          MODEL_PROVIDER_MODEL: ${{ secrets.MODEL_PROVIDER_MODEL }}
+          MODEL_PROVIDER_BASE_URL: ${{ secrets.MODEL_PROVIDER_BASE_URL }}
+          MODEL_PROVIDER_KEY: ${{ secrets.MODEL_PROVIDER_KEY }}
         run: |
           set -o pipefail
           tea ${{ inputs.test-path }} -n ${{ inputs.iterations }} 2>&1 | tee tea-output.txt
