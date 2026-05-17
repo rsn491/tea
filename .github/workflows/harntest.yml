@@ -37,6 +37,9 @@ jobs:
           MODEL_PROVIDER_MODEL: ${{ vars.MODEL_PROVIDER_MODEL }}
           MODEL_PROVIDER_BASE_URL: ${{ vars.MODEL_PROVIDER_BASE_URL }}
           MODEL_PROVIDER_KEY: ${{ secrets.MODEL_PROVIDER_KEY }}
+          TEA_JUDGE_MODEL: ${{ vars.TEA_JUDGE_MODEL }}
+          TEA_JUDGE_BASE_URL: ${{ vars.TEA_JUDGE_BASE_URL }}
+          TEA_JUDGE_API_KEY: ${{ secrets.TEA_JUDGE_API_KEY }}
         run: |
           set -o pipefail
           tea ${{ inputs.test-path }} -n ${{ inputs.iterations }} 2>&1 | tee tea-output.txt

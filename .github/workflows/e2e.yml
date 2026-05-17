@@ -28,3 +28,10 @@ jobs:
       test-path: examples/demo_calculator/agent-tests/test_add_new_operation_pi.py
       iterations: 1
     secrets: inherit
+
+  judge:
+    uses: ./.github/workflows/harntest.yml
+    with:
+      test-path: examples/demo_calculator/agent-tests/test_judge_quality.py
+      iterations: 1
+    secrets: inherit
