@@ -1,7 +1,12 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+
+from tea.agent.claude_code import ClaudeCode
+from tea.agent.harness import Harness
+from tea.executor.docker import DockerExecutor
 
 from .judge import Judge, JudgeResult
 
@@ -17,12 +22,6 @@ _DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 
 
 def _default_harness():
-    import os
-
-    from tea.agent.claude_code import ClaudeCode
-    from tea.agent.harness import Harness
-    from tea.executor.docker import DockerExecutor
-
     extra_volumes: dict[str, str] = {}
     host_claude_dir = os.path.expanduser("~/.claude")
     if os.path.isdir(host_claude_dir):

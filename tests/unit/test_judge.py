@@ -195,8 +195,8 @@ def test_external_judge_reads_env_vars(monkeypatch):
     mock_provider_cls = MagicMock()
 
     with (
-        patch("pydantic_ai.models.openai.OpenAIChatModel", mock_model_cls),
-        patch("pydantic_ai.providers.openai.OpenAIProvider", mock_provider_cls),
+        patch("tea.judge.pydantic_ai.OpenAIChatModel", mock_model_cls),
+        patch("tea.judge.pydantic_ai.OpenAIProvider", mock_provider_cls),
         patch("tea.judge.pydantic_ai.Agent"),
     ):
         from tea.judge.pydantic_ai import external_judge

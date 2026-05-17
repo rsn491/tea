@@ -35,4 +35,4 @@ markers = [
 ]
 
 [tool.ruff.lint]
-select = ["E", "W", "F", "I"]
+select = ["E", "W", "F", "I", "PLC0415"]
