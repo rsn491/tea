@@ -43,7 +43,6 @@ class RunBuilder:
         if self._workdir:
             tmp_dir = tempfile.mkdtemp()
             shutil.copytree(self._workdir, tmp_dir, dirs_exist_ok=True)
-            _open_permissions(tmp_dir)
         effective_workdir = tmp_dir if tmp_dir else self._workdir
         skills = _discover_skills(self._workdir)
         text = (
@@ -71,14 +70,6 @@ class RunBuilder:
 
 
 # helpers
-
-
-def _open_permissions(path: str) -> None:
-    for root, dirs, files in os.walk(path):
-        for d in dirs:
-            os.chmod(os.path.join(root, d), 0o777)
-        for f in files:
-            os.chmod(os.path.join(root, f), 0o666)
 
 
 def _discover_skills(workdir: str | None) -> list[str]:
