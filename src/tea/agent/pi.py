@@ -11,7 +11,12 @@ from .agent_run import AgentRun, Step, ToolCall
 from .harness import Harness
 from .model_config import ModelConfig
 
-_PI_IMAGE = "node:22"
+_PI_IMAGE = "tea-pi:latest"
+_PI_DOCKERFILE = (
+    "FROM node:22\n"
+    "ENV NPM_CONFIG_PREFIX=/home/node/.npm-global\n"
+    "RUN npm install -g pi --quiet 2>/dev/null\n"
+)
 
 
 class Pi(Agent):
@@ -21,7 +26,8 @@ class Pi(Agent):
     def build_spec(
         self, prompt: str, timeout: int, skills: list[str] = ()
     ) -> DockerSpec:
-        env: dict[str, str] = {"HOME": "/home/node"}
+        npm_prefix = "/home/node/.npm-global"
+        env: dict[str, str] = {"HOME": "/home/node", "NPM_CONFIG_PREFIX": npm_prefix}
         api_key: str | None = None
         if self._model_config.api_key_env:
             if key := os.environ.get(self._model_config.api_key_env):
@@ -49,11 +55,12 @@ class Pi(Agent):
 
         return DockerSpec(
             command=(
-                f"pi --mode json --no-extensions"
+                f"{npm_prefix}/bin/pi --mode json --no-extensions"
                 f" --model {self._model_config.model}"
                 f' "{_esc(prompt)}"'
             ),
             setup_command=setup_command,
+            dockerfile=_PI_DOCKERFILE,
             env=env,
             image=_PI_IMAGE,
             user="node",

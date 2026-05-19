@@ -6,7 +6,14 @@ import pytest
 
 from tea.agent.agent_run import AgentRun
 from tea.agent.model_config import ModelConfig
-from tea.agent.pi import Pi, PiHarness, _build_models_json, _read_skill_description
+from tea.agent.pi import (
+    Pi,
+    PiHarness,
+    _PI_DOCKERFILE,
+    _PI_IMAGE,
+    _build_models_json,
+    _read_skill_description,
+)
 from tea.executor import RawResult
 
 _ANTHROPIC_CFG = ModelConfig(
@@ -20,11 +27,12 @@ def test_build_spec_defaults_no_base_url(monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     spec = Pi(_ANTHROPIC_CFG).build_spec("hello", timeout=60)
 
-    assert spec.image == "node:22"
+    assert spec.image == _PI_IMAGE
     assert spec.user == "node"
     assert spec.timeout == 60
     assert spec.extra_hosts == {}
     assert spec.setup_command is None
+    assert spec.dockerfile == _PI_DOCKERFILE
     assert "--model anthropic/claude-sonnet-4-6" in spec.command
 
 
