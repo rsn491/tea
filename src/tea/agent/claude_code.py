@@ -10,13 +10,11 @@ from tea.executor.docker import DockerExecutor
 from .agent import Agent
 from .agent_run import AgentRun, Step, ToolCall
 from .harness import ApiKeyHarness, Harness
+from ._version import resolve_cli_version
 
-_CLAUDE_IMAGE = "tea-claude-code:latest"
-_CLAUDE_DOCKERFILE = (
-    "FROM node:22\n"
-    "ENV NPM_CONFIG_PREFIX=/home/node/.npm-global\n"
-    "RUN npm install -g @anthropic-ai/claude-code --quiet 2>/dev/null\n"
-)
+_NODE_VERSION = "22"
+_CLAUDE_CODE_PACKAGE = "@anthropic-ai/claude-code"
+_CLAUDE_CODE_VERSION_ENV = "CLAUDE_CODE_VERSION"
 _DEFAULT_MAX_TURNS = 25
 _DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 
@@ -45,6 +43,14 @@ class ClaudeCode(Agent):
         if os.path.isdir(host_claude_dir):
             extra_volumes[host_claude_dir] = "/home/node/.claude"
 
+        version = resolve_cli_version("claude", _CLAUDE_CODE_PACKAGE, _CLAUDE_CODE_VERSION_ENV)
+        image = f"tea-claude-code:{version}"
+        dockerfile = (
+            f"FROM node:{_NODE_VERSION}\n"
+            "ENV NPM_CONFIG_PREFIX=/home/node/.npm-global\n"
+            f"RUN npm install -g {_CLAUDE_CODE_PACKAGE}@{version} --quiet 2>/dev/null\n"
+        )
+
         return DockerSpec(
             command=(
                 f"{npm_prefix}/bin/claude --dangerously-skip-permissions"
@@ -52,9 +58,9 @@ class ClaudeCode(Agent):
                 f" --max-turns {int(self._max_turns)}"
                 f' --print --output-format stream-json --verbose "{_esc(prompt)}"'
             ),
-            dockerfile=_CLAUDE_DOCKERFILE,
+            dockerfile=dockerfile,
             env=env,
-            image=_CLAUDE_IMAGE,
+            image=image,
             user="node",
             timeout=timeout,
             extra_volumes=extra_volumes,

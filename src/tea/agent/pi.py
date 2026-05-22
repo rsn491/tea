@@ -10,13 +10,11 @@ from .agent import Agent
 from .agent_run import AgentRun, Step, ToolCall
 from .harness import Harness
 from .model_config import ModelConfig
+from ._version import resolve_cli_version
 
-_PI_IMAGE = "tea-pi:latest"
-_PI_DOCKERFILE = (
-    "FROM node:22\n"
-    "ENV NPM_CONFIG_PREFIX=/home/node/.npm-global\n"
-    "RUN npm install -g pi --quiet 2>/dev/null\n"
-)
+_NODE_VERSION = "22"
+_PI_PACKAGE = "pi"
+_PI_VERSION_ENV = "PI_VERSION"
 
 
 class Pi(Agent):
@@ -53,6 +51,14 @@ class Pi(Agent):
             )
             extra_hosts["host.docker.internal"] = "host-gateway"
 
+        version = resolve_cli_version("pi", _PI_PACKAGE, _PI_VERSION_ENV)
+        image = f"tea-pi:{version}"
+        dockerfile = (
+            f"FROM node:{_NODE_VERSION}\n"
+            "ENV NPM_CONFIG_PREFIX=/home/node/.npm-global\n"
+            f"RUN npm install -g {_PI_PACKAGE}@{version} --quiet 2>/dev/null\n"
+        )
+
         return DockerSpec(
             command=(
                 f"{npm_prefix}/bin/pi --mode json --no-extensions"
@@ -60,9 +66,9 @@ class Pi(Agent):
                 f' "{_esc(prompt)}"'
             ),
             setup_command=setup_command,
-            dockerfile=_PI_DOCKERFILE,
+            dockerfile=dockerfile,
             env=env,
-            image=_PI_IMAGE,
+            image=image,
             user="node",
             timeout=timeout,
             extra_hosts=extra_hosts,

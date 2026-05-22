@@ -9,13 +9,11 @@ from tea.executor.docker import DockerExecutor
 from .agent import Agent
 from .agent_run import AgentRun, Step
 from .harness import ApiKeyHarness, Harness
+from ._version import resolve_cli_version
 
-_CODEX_IMAGE = "tea-codex:latest"
-_CODEX_DOCKERFILE = (
-    "FROM node:22\n"
-    "ENV NPM_CONFIG_PREFIX=/home/node/.npm-global\n"
-    "RUN npm install -g @openai/codex --quiet 2>/dev/null\n"
-)
+_NODE_VERSION = "22"
+_CODEX_PACKAGE = "@openai/codex"
+_CODEX_VERSION_ENV = "CODEX_VERSION"
 _DEFAULT_MODEL = "gpt-5.3-codex"
 
 
@@ -30,6 +28,15 @@ class Codex(Agent):
         env: dict[str, str] = {"HOME": "/home/node", "NPM_CONFIG_PREFIX": npm_prefix}
         if api_key := os.environ.get("OPENAI_API_KEY"):
             env["OPENAI_API_KEY"] = api_key
+
+        version = resolve_cli_version("codex", _CODEX_PACKAGE, _CODEX_VERSION_ENV)
+        image = f"tea-codex:{version}"
+        dockerfile = (
+            f"FROM node:{_NODE_VERSION}\n"
+            "ENV NPM_CONFIG_PREFIX=/home/node/.npm-global\n"
+            f"RUN npm install -g {_CODEX_PACKAGE}@{version} --quiet 2>/dev/null\n"
+        )
+
         return DockerSpec(
             command=(
                 f"{npm_prefix}/bin/codex exec"
@@ -39,9 +46,9 @@ class Codex(Agent):
                 f' "{_esc(prompt)}"'
             ),
             setup_command=_skill_setup(skills) if skills else None,
-            dockerfile=_CODEX_DOCKERFILE,
+            dockerfile=dockerfile,
             env=env,
-            image=_CODEX_IMAGE,
+            image=image,
             user="node",
             timeout=timeout,
         )
