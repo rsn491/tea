@@ -43,6 +43,10 @@ def run_in_docker(config: DockerRunConfig) -> DockerRunResult:
         detach=True,
         remove=False,
     )
+    stdout = ""
+    stderr = ""
+    exit_code = -1
+    duration_s = 0.0
     try:
         exit_code = container.wait(timeout=config.timeout)["StatusCode"]
         duration_s = time.monotonic() - t0

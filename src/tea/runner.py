@@ -24,6 +24,10 @@ def load_module(path: Path) -> ModuleType:
     if parent not in sys.path:
         sys.path.insert(0, parent)
     spec = importlib.util.spec_from_file_location(path.stem, path.resolve())
+    if spec is None or spec.loader is None:
+        raise ImportError(
+            f"Cannot load module from '{path}': not a recognisable Python file"
+        )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -110,7 +114,7 @@ class TestRunner:
                     check_results[check_label].append(passed)
         except KeyboardInterrupt:
             if check_results or all_runs:
-                print_test_results(check_results, all_runs, run_errors, i)
+                print_test_results(check_results, all_runs, run_errors, i + 1)
             raise
 
         print_test_results(check_results, all_runs, run_errors, self._iterations)

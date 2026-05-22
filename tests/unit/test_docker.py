@@ -63,3 +63,16 @@ def test_container_removed_on_timeout(mock_docker_module):
         run_in_docker(config)
 
     container.remove.assert_called_once_with(force=True)
+
+
+@patch("tea.infra.docker.docker")
+def test_run_in_docker_raises_original_error_not_unbound(mock_docker_module):
+    # If container.wait() raises, the original exception must propagate — not an
+    # UnboundLocalError caused by stdout/stderr/exit_code never being assigned.
+    container = MagicMock()
+    container.wait.side_effect = RuntimeError("container timed out")
+    mock_docker_module.from_env.return_value.containers.run.return_value = container
+
+    config = DockerRunConfig(image="node:22", command=["sleep", "999"], timeout=1)
+    with pytest.raises(RuntimeError, match="container timed out"):
+        run_in_docker(config)
