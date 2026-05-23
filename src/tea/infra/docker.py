@@ -29,18 +29,6 @@ class DockerRunResult:
 
 
 class Docker:
-    """Manages in-flight Docker containers for a batch of runs.
-
-    **Singleton access** — ``Docker.get()`` returns the instance bound to
-    the current context (set by the parallel runner via ``_active_runner``)
-    or the module-level singleton for sequential use.
-
-    **Parallel shutdown** — call ``shutdown()`` from the main thread to kill
-    every running container and prevent new ones from starting.  Worker
-    threads detect the shutdown after ``container.wait()`` returns and raise
-    ``KeyboardInterrupt``, letting the executor drain with ``wait=True``.
-    """
-
     _singleton: ClassVar[Docker | None] = None
 
     def __init__(self) -> None:
