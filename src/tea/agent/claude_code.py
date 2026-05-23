@@ -43,7 +43,7 @@ class ClaudeCode(Agent):
         if os.path.isdir(host_claude_dir):
             extra_volumes[host_claude_dir] = "/home/node/.claude"
 
-        version = resolve_cli_version("claude", _CLAUDE_CODE_PACKAGE, _CLAUDE_CODE_VERSION_ENV)
+        version = self.version()
         image = f"tea-claude-code:{version}"
         dockerfile = (
             f"FROM node:{_NODE_VERSION}\n"
@@ -65,6 +65,9 @@ class ClaudeCode(Agent):
             timeout=timeout,
             extra_volumes=extra_volumes,
         )
+
+    def version(self) -> str:
+        return resolve_cli_version("claude", _CLAUDE_CODE_PACKAGE, _CLAUDE_CODE_VERSION_ENV)
 
     def parse(self, raw: RawResult) -> AgentRun:
         run = self._parse(raw.stdout)

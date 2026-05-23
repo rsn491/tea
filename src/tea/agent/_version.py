@@ -4,7 +4,7 @@ import functools
 import os
 import re
 import subprocess
-import uuid
+from datetime import date
 
 
 @functools.lru_cache(maxsize=None)
@@ -15,7 +15,8 @@ def resolve_cli_version(cli_cmd: str, package: str, env_var: str) -> str:
     1. ``env_var`` environment variable (explicit override)
     2. ``cli_cmd --version`` (e.g. ``claude --version``)
     3. ``npm list -g --depth=0 <package>`` (fallback when CLI is not on PATH)
-    4. ``latest-<uuid4>`` — forces a fresh image build, never raises
+    4. ``latest-<yyyyMMdd>`` — date-stamped fallback; forces a rebuild when the
+       date changes, never raises
 
     The result is cached per ``(cli_cmd, package, env_var)`` tuple so that
     subprocess calls run at most once per process.  Tests that monkeypatch the
@@ -53,5 +54,5 @@ def resolve_cli_version(cli_cmd: str, package: str, env_var: str) -> str:
     except FileNotFoundError:
         pass
 
-    # 4. Last resort — unique tag forces a fresh build, avoids stale :latest
-    return f"latest-{uuid.uuid4()}"
+    # 4. Last resort — date-stamped tag so a fresh build is triggered each day
+    return f"latest-{date.today().strftime('%Y%m%d')}"

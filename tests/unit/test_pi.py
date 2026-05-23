@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import date
 
 import pytest
 
@@ -30,28 +31,22 @@ def test_resolve_cli_version_uses_env_var(monkeypatch):
     resolve_cli_version.cache_clear()
 
 
-def test_resolve_cli_version_last_resort_is_latest_uuid(monkeypatch):
-    """When env var, CLI, and npm all fail the version is latest-<uuid>."""
+def test_resolve_cli_version_last_resort_is_latest_date(monkeypatch):
+    """When env var, CLI, and npm all fail the version is latest-<yyyyMMdd>."""
     monkeypatch.delenv("PI_VERSION", raising=False)
     resolve_cli_version.cache_clear()
     # Use a nonsense CLI name so both the CLI and npm fallback fail
     version = resolve_cli_version("__no_such_cli__", "__no_such_pkg__", "PI_VERSION")
-    assert version.startswith("latest-")
-    assert re.match(
-        r"latest-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
-        version,
-    )
+    expected = f"latest-{date.today().strftime('%Y%m%d')}"
+    assert version == expected
     resolve_cli_version.cache_clear()
 
 
-def test_resolve_cli_version_last_resort_produces_unique_tags(monkeypatch):
-    """Two cache-cleared calls without env var should return different UUIDs."""
-    monkeypatch.delenv("PI_VERSION", raising=False)
+def test_pi_agent_version_uses_env_var(monkeypatch):
+    """Pi.version() delegates to resolve_cli_version and picks up the env var."""
+    monkeypatch.setenv("PI_VERSION", "9.8.7")
     resolve_cli_version.cache_clear()
-    v1 = resolve_cli_version("__no_such_cli__", "__no_such_pkg__", "PI_VERSION")
-    resolve_cli_version.cache_clear()
-    v2 = resolve_cli_version("__no_such_cli__", "__no_such_pkg__", "PI_VERSION")
-    assert v1 != v2
+    assert Pi(_ANTHROPIC_CFG).version() == "9.8.7"
     resolve_cli_version.cache_clear()
 
 

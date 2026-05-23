@@ -29,7 +29,7 @@ class Codex(Agent):
         if api_key := os.environ.get("OPENAI_API_KEY"):
             env["OPENAI_API_KEY"] = api_key
 
-        version = resolve_cli_version("codex", _CODEX_PACKAGE, _CODEX_VERSION_ENV)
+        version = self.version()
         image = f"tea-codex:{version}"
         dockerfile = (
             f"FROM node:{_NODE_VERSION}\n"
@@ -52,6 +52,9 @@ class Codex(Agent):
             user="node",
             timeout=timeout,
         )
+
+    def version(self) -> str:
+        return resolve_cli_version("codex", _CODEX_PACKAGE, _CODEX_VERSION_ENV)
 
     def parse(self, raw: RawResult) -> AgentRun:
         steps = _parse_output(raw.stdout)

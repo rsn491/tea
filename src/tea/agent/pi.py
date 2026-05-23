@@ -51,7 +51,7 @@ class Pi(Agent):
             )
             extra_hosts["host.docker.internal"] = "host-gateway"
 
-        version = resolve_cli_version("pi", _PI_PACKAGE, _PI_VERSION_ENV)
+        version = self.version()
         image = f"tea-pi:{version}"
         dockerfile = (
             f"FROM node:{_NODE_VERSION}\n"
@@ -91,6 +91,9 @@ class Pi(Agent):
             f"Available skills:\n{listing}"
         )
         return f"{preamble}\n\n{prompt}"
+
+    def version(self) -> str:
+        return resolve_cli_version("pi", _PI_PACKAGE, _PI_VERSION_ENV)
 
     def parse(self, raw: RawResult) -> AgentRun:
         run = _parse(raw.stdout)
