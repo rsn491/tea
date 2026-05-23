@@ -6,10 +6,10 @@ import shlex
 from tea.executor import DockerSpec, RawResult
 from tea.executor.docker import DockerExecutor
 
+from ._version import resolve_cli_version
 from .agent import Agent
 from .agent_run import AgentRun, Step
 from .harness import ApiKeyHarness, Harness
-from ._version import resolve_cli_version
 
 _NODE_VERSION = "22"
 _CODEX_PACKAGE = "@openai/codex"
@@ -54,7 +54,9 @@ class Codex(Agent):
         )
 
     def version(self) -> str:
-        return resolve_cli_version("codex --version", _CODEX_PACKAGE, _CODEX_VERSION_ENV)
+        return resolve_cli_version(
+            "codex --version", _CODEX_PACKAGE, _CODEX_VERSION_ENV
+        )
 
     def parse(self, raw: RawResult) -> AgentRun:
         steps = _parse_output(raw.stdout)

@@ -6,11 +6,11 @@ import os
 from tea.executor import DockerSpec, RawResult
 from tea.executor.docker import DockerExecutor
 
+from ._version import resolve_cli_version
 from .agent import Agent
 from .agent_run import AgentRun, Step, ToolCall
 from .harness import Harness
 from .model_config import ModelConfig
-from ._version import resolve_cli_version
 
 _NODE_VERSION = "22"
 _PI_PACKAGE = "pi"

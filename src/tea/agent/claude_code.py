@@ -7,10 +7,10 @@ import shlex
 from tea.executor import DockerSpec, RawResult
 from tea.executor.docker import DockerExecutor
 
+from ._version import resolve_cli_version
 from .agent import Agent
 from .agent_run import AgentRun, Step, ToolCall
 from .harness import ApiKeyHarness, Harness
-from ._version import resolve_cli_version
 
 _NODE_VERSION = "22"
 _CLAUDE_CODE_PACKAGE = "@anthropic-ai/claude-code"
@@ -67,7 +67,9 @@ class ClaudeCode(Agent):
         )
 
     def version(self) -> str:
-        return resolve_cli_version("claude --version", _CLAUDE_CODE_PACKAGE, _CLAUDE_CODE_VERSION_ENV)
+        return resolve_cli_version(
+            "claude --version", _CLAUDE_CODE_PACKAGE, _CLAUDE_CODE_VERSION_ENV
+        )
 
     def parse(self, raw: RawResult) -> AgentRun:
         run = self._parse(raw.stdout)
