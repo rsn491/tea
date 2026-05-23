@@ -8,17 +8,17 @@ from datetime import date
 
 
 @functools.lru_cache(maxsize=None)
-def resolve_cli_version(cli_cmd: str, package: str, env_var: str) -> str:
+def resolve_cli_version(version_cmd: str, package: str, env_var: str) -> str:
     """Resolve the version of a CLI tool at runtime.
 
     Resolution order:
     1. ``env_var`` environment variable (explicit override)
-    2. ``cli_cmd --version`` (e.g. ``claude --version``)
+    2. ``version_cmd`` shell command (e.g. ``"claude --version"``)
     3. ``npm list -g --depth=0 <package>`` (fallback when CLI is not on PATH)
     4. ``latest-<yyyyMMdd>`` — date-stamped fallback; forces a rebuild when the
        date changes, never raises
 
-    The result is cached per ``(cli_cmd, package, env_var)`` tuple so that
+    The result is cached per ``(version_cmd, package, env_var)`` tuple so that
     subprocess calls run at most once per process.  Tests that monkeypatch the
     environment variable should call ``resolve_cli_version.cache_clear()``
     before and after the test to avoid cache poisoning.
@@ -27,10 +27,10 @@ def resolve_cli_version(cli_cmd: str, package: str, env_var: str) -> str:
     if v := os.environ.get(env_var):
         return v
 
-    # 2. Ask the CLI directly (e.g. "claude --version" → "1.2.3")
+    # 2. Run the caller-supplied version command (e.g. "claude --version")
     try:
         out = subprocess.run(
-            [cli_cmd, "--version"], capture_output=True, text=True
+            version_cmd.split(), capture_output=True, text=True
         ).stdout.strip()
         m = re.search(r"(\d+\.\d+\.\d+)", out)
         if m:

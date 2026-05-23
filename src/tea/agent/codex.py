@@ -54,7 +54,7 @@ class Codex(Agent):
         )
 
     def version(self) -> str:
-        return resolve_cli_version("codex", _CODEX_PACKAGE, _CODEX_VERSION_ENV)
+        return resolve_cli_version("codex --version", _CODEX_PACKAGE, _CODEX_VERSION_ENV)
 
     def parse(self, raw: RawResult) -> AgentRun:
         steps = _parse_output(raw.stdout)

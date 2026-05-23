@@ -27,7 +27,7 @@ _ANTHROPIC_CFG = ModelConfig(
 def test_resolve_cli_version_uses_env_var(monkeypatch):
     monkeypatch.setenv("PI_VERSION", "3.2.1")
     resolve_cli_version.cache_clear()
-    assert resolve_cli_version("pi", "pi", "PI_VERSION") == "3.2.1"
+    assert resolve_cli_version("pi --version", "pi", "PI_VERSION") == "3.2.1"
     resolve_cli_version.cache_clear()
 
 
@@ -36,7 +36,7 @@ def test_resolve_cli_version_last_resort_is_latest_date(monkeypatch):
     monkeypatch.delenv("PI_VERSION", raising=False)
     resolve_cli_version.cache_clear()
     # Use a nonsense CLI name so both the CLI and npm fallback fail
-    version = resolve_cli_version("__no_such_cli__", "__no_such_pkg__", "PI_VERSION")
+    version = resolve_cli_version("__no_such_cli__ --version", "__no_such_pkg__", "PI_VERSION")
     expected = f"latest-{date.today().strftime('%Y%m%d')}"
     assert version == expected
     resolve_cli_version.cache_clear()

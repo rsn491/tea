@@ -67,7 +67,7 @@ class ClaudeCode(Agent):
         )
 
     def version(self) -> str:
-        return resolve_cli_version("claude", _CLAUDE_CODE_PACKAGE, _CLAUDE_CODE_VERSION_ENV)
+        return resolve_cli_version("claude --version", _CLAUDE_CODE_PACKAGE, _CLAUDE_CODE_VERSION_ENV)
 
     def parse(self, raw: RawResult) -> AgentRun:
         run = self._parse(raw.stdout)

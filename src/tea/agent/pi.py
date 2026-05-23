@@ -93,7 +93,7 @@ class Pi(Agent):
         return f"{preamble}\n\n{prompt}"
 
     def version(self) -> str:
-        return resolve_cli_version("pi", _PI_PACKAGE, _PI_VERSION_ENV)
+        return resolve_cli_version("pi --version", _PI_PACKAGE, _PI_VERSION_ENV)
 
     def parse(self, raw: RawResult) -> AgentRun:
         run = _parse(raw.stdout)
