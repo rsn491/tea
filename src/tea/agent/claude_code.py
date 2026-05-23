@@ -25,7 +25,9 @@ class ClaudeCode(Agent):
     ) -> None:
         self._model = model
         self._max_turns = max_turns
-        self._extra_volumes: dict[str, str] = dict(extra_volumes) if extra_volumes else {}
+        self._extra_volumes: dict[str, str] = (
+            dict(extra_volumes) if extra_volumes else {}
+        )
 
     @property
     def model(self) -> str:
@@ -145,7 +147,9 @@ class ClaudeCodeHarness(ApiKeyHarness):
     def with_api_key(self) -> Harness:
         agent = self._agent
         model = agent.model if isinstance(agent, ClaudeCode) else _DEFAULT_MODEL
-        max_turns = agent.max_turns if isinstance(agent, ClaudeCode) else _DEFAULT_MAX_TURNS
+        max_turns = (
+            agent.max_turns if isinstance(agent, ClaudeCode) else _DEFAULT_MAX_TURNS
+        )
         return Harness(ClaudeCode(model=model, max_turns=max_turns), DockerExecutor())
 
 
