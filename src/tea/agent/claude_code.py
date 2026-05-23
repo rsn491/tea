@@ -45,11 +45,6 @@ class ClaudeCode(Agent):
 
         version = self.version()
         image = f"tea-claude-code:{version}"
-        dockerfile = (
-            f"FROM node:{_NODE_VERSION}\n"
-            "ENV NPM_CONFIG_PREFIX=/home/node/.npm-global\n"
-            f"RUN npm install -g {_CLAUDE_CODE_PACKAGE}@{version} --quiet 2>/dev/null\n"
-        )
 
         return DockerSpec(
             command=(
@@ -58,12 +53,19 @@ class ClaudeCode(Agent):
                 f" --max-turns {int(self._max_turns)}"
                 f' --print --output-format stream-json --verbose "{_esc(prompt)}"'
             ),
-            dockerfile=dockerfile,
+            dockerfile=self._dockerfile(version),
             env=env,
             image=image,
             user="node",
             timeout=timeout,
             extra_volumes=extra_volumes,
+        )
+
+    def _dockerfile(self, version: str) -> str:
+        return (
+            f"FROM node:{_NODE_VERSION}\n"
+            "ENV NPM_CONFIG_PREFIX=/home/node/.npm-global\n"
+            f"RUN npm install -g {_CLAUDE_CODE_PACKAGE}@{version} --quiet 2>/dev/null\n"
         )
 
     def version(self) -> str:

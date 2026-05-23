@@ -53,11 +53,6 @@ class Pi(Agent):
 
         version = self.version()
         image = f"tea-pi:{version}"
-        dockerfile = (
-            f"FROM node:{_NODE_VERSION}\n"
-            "ENV NPM_CONFIG_PREFIX=/home/node/.npm-global\n"
-            f"RUN npm install -g {_PI_PACKAGE}@{version} --quiet 2>/dev/null\n"
-        )
 
         return DockerSpec(
             command=(
@@ -66,7 +61,7 @@ class Pi(Agent):
                 f' "{_esc(prompt)}"'
             ),
             setup_command=setup_command,
-            dockerfile=dockerfile,
+            dockerfile=self._dockerfile(version),
             env=env,
             image=image,
             user="node",
@@ -91,6 +86,13 @@ class Pi(Agent):
             f"Available skills:\n{listing}"
         )
         return f"{preamble}\n\n{prompt}"
+
+    def _dockerfile(self, version: str) -> str:
+        return (
+            f"FROM node:{_NODE_VERSION}\n"
+            "ENV NPM_CONFIG_PREFIX=/home/node/.npm-global\n"
+            f"RUN npm install -g {_PI_PACKAGE}@{version} --quiet 2>/dev/null\n"
+        )
 
     def version(self) -> str:
         return resolve_cli_version("pi --version", _PI_PACKAGE, _PI_VERSION_ENV)

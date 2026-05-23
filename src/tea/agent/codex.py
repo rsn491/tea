@@ -31,11 +31,6 @@ class Codex(Agent):
 
         version = self.version()
         image = f"tea-codex:{version}"
-        dockerfile = (
-            f"FROM node:{_NODE_VERSION}\n"
-            "ENV NPM_CONFIG_PREFIX=/home/node/.npm-global\n"
-            f"RUN npm install -g {_CODEX_PACKAGE}@{version} --quiet 2>/dev/null\n"
-        )
 
         return DockerSpec(
             command=(
@@ -46,11 +41,18 @@ class Codex(Agent):
                 f' "{_esc(prompt)}"'
             ),
             setup_command=_skill_setup(skills) if skills else None,
-            dockerfile=dockerfile,
+            dockerfile=self._dockerfile(version),
             env=env,
             image=image,
             user="node",
             timeout=timeout,
+        )
+
+    def _dockerfile(self, version: str) -> str:
+        return (
+            f"FROM node:{_NODE_VERSION}\n"
+            "ENV NPM_CONFIG_PREFIX=/home/node/.npm-global\n"
+            f"RUN npm install -g {_CODEX_PACKAGE}@{version} --quiet 2>/dev/null\n"
         )
 
     def version(self) -> str:
