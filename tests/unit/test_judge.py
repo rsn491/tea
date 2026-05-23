@@ -78,6 +78,12 @@ def test_check_judge_task_returns_float():
     assert isinstance(result, float)
 
 
+def test_check_judge_task_raises_type_error_for_non_judge():
+    run = _make_run()
+    with pytest.raises(TypeError, match="Judge instance"):
+        check_judge_task(run, diff="x", prompt="p", judge=object())
+
+
 # --- AgentRun.transcript ---
 
 

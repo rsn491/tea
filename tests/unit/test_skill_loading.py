@@ -5,10 +5,11 @@ import tempfile
 
 from tea.agent.agent import Agent
 from tea.agent.agent_run import AgentRun
-from tea.agent.claude_code import ClaudeCode
+from tea.agent.claude_code import ClaudeCode, ClaudeCodeHarness
 from tea.agent.codex import Codex
 from tea.agent.run_builder import _discover_skills
 from tea.executor import ExecutionSpec, RawResult
+from tea.executor.docker import DockerExecutor
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -109,6 +110,55 @@ def test_agent_default_prepare_skills_is_noop():
         _make_skill(workdir, "my-skill", "# Should be ignored")
         result = agent.prepare_skills("original prompt", workdir, ["my-skill"])
     assert result == "original prompt"
+
+
+# ── ClaudeCode public properties (5b) ────────────────────────────────────────
+
+
+def test_claude_code_model_property():
+    agent = ClaudeCode(model="claude-opus-4-7")
+    assert agent.model == "claude-opus-4-7"
+
+
+def test_claude_code_max_turns_property():
+    agent = ClaudeCode(max_turns=5)
+    assert agent.max_turns == 5
+
+
+# ── ClaudeCode extra_volumes constructor param (5a) ───────────────────────────
+
+
+def test_claude_code_extra_volumes_merged_into_spec(monkeypatch, tmp_path):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("CLAUDE_CODE_OAUTH_TOKEN", raising=False)
+    # Ensure ~/.claude does NOT exist so it won't add its own entry
+    monkeypatch.setattr(os.path, "isdir", lambda p: False)
+
+    extra = {str(tmp_path): "/container/extra"}
+    spec = ClaudeCode(extra_volumes=extra).build_spec("task", 60)
+    assert str(tmp_path) in spec.extra_volumes
+    assert spec.extra_volumes[str(tmp_path)] == "/container/extra"
+
+
+def test_claude_code_extra_volumes_defaults_empty(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("CLAUDE_CODE_OAUTH_TOKEN", raising=False)
+    monkeypatch.setattr(os.path, "isdir", lambda p: False)
+
+    spec = ClaudeCode().build_spec("task", 60)
+    assert spec.extra_volumes == {}
+
+
+# ── ClaudeCodeHarness uses public properties (5b) ────────────────────────────
+
+
+def test_claude_code_harness_with_api_key_threads_model_and_turns():
+    agent = ClaudeCode(model="claude-sonnet-4-6", max_turns=3)
+    harness = ClaudeCodeHarness(agent, DockerExecutor()).with_api_key()
+    inner = harness._agent
+    assert isinstance(inner, ClaudeCode)
+    assert inner.model == "claude-sonnet-4-6"
+    assert inner.max_turns == 3
 
 
 # ── shell-injection regression tests ─────────────────────────────────────────
