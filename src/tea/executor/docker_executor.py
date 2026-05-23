@@ -8,6 +8,9 @@ _CONTAINER_WORKDIR = "/workspace"
 
 
 class DockerExecutor(Executor):
+    def __init__(self, docker: Docker = Docker.get()) -> None:
+        self._docker = docker
+
     def run(self, spec: DockerSpec, workdir: str | None) -> RawResult:
         volumes = {workdir: _CONTAINER_WORKDIR} if workdir else {}
         volumes.update(spec.extra_volumes)
@@ -27,5 +30,5 @@ class DockerExecutor(Executor):
             user=spec.user,
             extra_hosts=spec.extra_hosts,
         )
-        r = Docker.get().run(config)
+        r = self._docker.run(config)
         return RawResult(r.stdout, r.stderr, r.exit_code, r.duration_s)
