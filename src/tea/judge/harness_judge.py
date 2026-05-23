@@ -6,7 +6,7 @@ import re
 
 from tea.agent.claude_code import ClaudeCode
 from tea.agent.harness import Harness
-from tea.executor.docker import DockerExecutor
+from tea.executor.docker_executor import DockerExecutor
 
 from .judge import Judge, JudgeResult
 

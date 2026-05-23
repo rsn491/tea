@@ -13,7 +13,7 @@ from tea.checkers import (
     check_skill_used,
 )
 from tea.executor import DockerSpec, ExecutionSpec, Executor, RawResult
-from tea.executor.docker import DockerExecutor
+from tea.executor.docker_executor import DockerExecutor
 from tea.judge import HarnessJudge, Judge, JudgeResult, external_judge
 from tea.runner import TestRunner, iterations
 

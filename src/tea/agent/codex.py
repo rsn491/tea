@@ -5,7 +5,7 @@ import shlex
 from dataclasses import replace
 
 from tea.executor import DockerSpec, RawResult
-from tea.executor.docker import DockerExecutor
+from tea.executor.docker_executor import DockerExecutor
 
 from ._version import resolve_cli_version
 from .agent import Agent
