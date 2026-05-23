@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import importlib.util
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -10,7 +9,8 @@ from tea.runner import load_module
 
 
 def test_load_module_raises_import_error_when_spec_is_none(tmp_path):
-    # A .txt file is not a recognised Python module; spec_from_file_location returns None
+    # A .txt file is not a recognised Python module; spec_from_file_location
+    # returns None.
     non_py = tmp_path / "not_python.txt"
     non_py.write_text("hello")
     with pytest.raises(ImportError, match="recognisable Python file"):
