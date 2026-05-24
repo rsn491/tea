@@ -161,6 +161,13 @@ def test_harness_judge_parse_raises_when_no_json():
         _parse("I think it looks good overall.")
 
 
+def test_harness_judge_parse_raises_value_error_on_malformed_json():
+    # A trailing comma is not valid JSON; the regex will match but json.loads must fail.
+    # The fix wraps JSONDecodeError in a ValueError with context about the matched text.
+    with pytest.raises(ValueError, match="malformed JSON"):
+        _parse('{"score": 0.5, "rationale": "ok",}')
+
+
 def test_external_judge_raises_with_base_url_but_no_api_key(monkeypatch):
     monkeypatch.setenv("TEA_JUDGE_MODEL", "llama3.2")
     monkeypatch.setenv("TEA_JUDGE_BASE_URL", "http://localhost:11434/v1")

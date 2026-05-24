@@ -58,7 +58,10 @@ def _parse(text: str) -> JudgeResult:
         raise ValueError(
             f"Judge did not return a valid JSON score. Output: {text[:300]}"
         )
-    data = json.loads(match.group())
+    try:
+        data = json.loads(match.group())
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Judge returned malformed JSON: {match.group()!r}") from exc
     score = float(data["score"])
     if not 0.0 <= score <= 1.0:
         raise ValueError(f"Judge score {score} out of range [0.0, 1.0]")
