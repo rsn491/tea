@@ -3,10 +3,14 @@ from __future__ import annotations
 import os
 import tempfile
 
+import pytest
+
 from tea.agent.agent import Agent
 from tea.agent.agent_run import AgentRun
 from tea.agent.claude_code import ClaudeCode, ClaudeCodeHarness
 from tea.agent.codex import Codex
+from tea.agent.model_config import ModelConfig
+from tea.agent.pi import Pi
 from tea.agent.run_builder import _discover_skills
 from tea.executor import ExecutionSpec, RawResult
 from tea.executor.docker import DockerExecutor
@@ -188,3 +192,23 @@ def test_codex_skill_name_injection_is_quoted(monkeypatch):
     # the injection payload must not appear outside the quoted token
     sanitised = spec.setup_command.replace("'skill; echo hacked'", "SAFE")
     assert "echo hacked" not in sanitised
+
+
+# ── path-traversal regression tests (skill names containing /, \, ., ..) ─────
+
+
+@pytest.mark.parametrize("bad_name", ["../evil", "a/b", "..", ".", r"a\b"])
+def test_codex_skill_name_rejects_path_traversal(monkeypatch, bad_name):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    with pytest.raises(ValueError, match="Invalid skill name"):
+        Codex().build_spec("task", 60, [bad_name])
+
+
+_PI_CFG = ModelConfig("anthropic/claude-sonnet-4-6", api_key_env="ANTHROPIC_API_KEY")
+
+
+@pytest.mark.parametrize("bad_name", ["../evil", "a/b", "..", ".", r"a\b"])
+def test_pi_skill_name_rejects_path_traversal(monkeypatch, bad_name):
+    monkeypatch.setenv("PI_VERSION", "1.0.0")
+    with pytest.raises(ValueError, match="Invalid skill name"):
+        Pi(_PI_CFG).build_spec("task", 60, [bad_name])

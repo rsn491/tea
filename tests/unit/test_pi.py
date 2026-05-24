@@ -12,7 +12,6 @@ from tea.agent.pi import (
     Pi,
     PiHarness,
     _build_models_json,
-    _read_skill_description,
 )
 from tea.executor import RawResult
 
@@ -190,61 +189,69 @@ def test_pi_parse_attaches_exit_code_stderr_and_duration():
     assert run.steps[0].content == "ok"
 
 
-# ── _read_skill_description ───────────────────────────────────────────────────
+# ── docker-native skill loading (build_spec + _skill_setup) ──────────────────
 
 
-def test_read_skill_description_parses_frontmatter(tmp_path):
-    skill = tmp_path / "SKILL.md"
-    skill.write_text("---\ndescription: Add a new math operation\n---\n# body\n")
-    assert _read_skill_description(str(skill)) == "Add a new math operation"
-
-
-def test_read_skill_description_missing_file():
-    assert _read_skill_description("/nonexistent/SKILL.md") == ""
-
-
-def test_read_skill_description_no_frontmatter(tmp_path):
-    skill = tmp_path / "SKILL.md"
-    skill.write_text("# No frontmatter here\n")
-    assert _read_skill_description(str(skill)) == ""
-
-
-def test_read_skill_description_no_description_key(tmp_path):
-    skill = tmp_path / "SKILL.md"
-    skill.write_text("---\ntitle: Something\n---\n")
-    assert _read_skill_description(str(skill)) == ""
-
-
-# ── Pi.prepare_skills ─────────────────────────────────────────────────────────
-
-
-def test_prepare_skills_prepends_listing(tmp_path):
-    skills_dir = tmp_path / ".claude" / "skills" / "add-operation"
-    skills_dir.mkdir(parents=True)
-    (skills_dir / "SKILL.md").write_text(
-        "---\ndescription: How to add an operation\n---\n# body\n"
-    )
-    result = Pi(_ANTHROPIC_CFG).prepare_skills(
-        "Do the task", str(tmp_path), ["add-operation"]
-    )
-    assert "Available skills:" in result
-    assert "add-operation: How to add an operation" in result
-    assert ".claude/skills/add-operation/SKILL.md" in result
-    assert result.endswith("Do the task")
-
-
-def test_prepare_skills_no_skills_returns_prompt_unchanged():
-    result = Pi(_ANTHROPIC_CFG).prepare_skills("Do the task", "/some/dir", [])
+def test_prepare_skills_default_no_op_leaves_prompt_unchanged():
+    # Pi now relies on Agent.prepare_skills (no-op): the prompt passed to the
+    # CLI must not be mutated, and the SKILL.md preamble must not leak in.
+    result = Pi(_ANTHROPIC_CFG).prepare_skills("Do the task", "/some/dir", ["a"])
     assert result == "Do the task"
 
 
-def test_prepare_skills_multiple_skills(tmp_path):
-    for name, desc in [("skill-a", "First skill"), ("skill-b", "Second skill")]:
-        d = tmp_path / ".claude" / "skills" / name
-        d.mkdir(parents=True)
-        (d / "SKILL.md").write_text(f"---\ndescription: {desc}\n---\n")
-    result = Pi(_ANTHROPIC_CFG).prepare_skills(
-        "Task", str(tmp_path), ["skill-a", "skill-b"]
+def test_build_spec_no_skills_no_base_url_setup_command_is_none():
+    spec = Pi(_ANTHROPIC_CFG).build_spec("hi", timeout=30, skills=[])
+    assert spec.setup_command is None
+
+
+def test_build_spec_skills_setup_copies_into_pi_native_dir():
+    spec = Pi(_ANTHROPIC_CFG).build_spec("hi", timeout=30, skills=["add-operation"])
+    assert spec.setup_command == (
+        "mkdir -p /home/node/.pi/agent/skills/add-operation"
+        " && cp /workspace/.claude/skills/add-operation/SKILL.md"
+        " /home/node/.pi/agent/skills/add-operation/SKILL.md"
     )
-    assert "skill-a: First skill" in result
-    assert "skill-b: Second skill" in result
+    # The user prompt must not be polluted with a skill preamble.
+    assert "Available skills" not in spec.command
+    assert "SKILL.md" not in spec.command
+
+
+def test_build_spec_skills_setup_handles_multiple_with_and_separator():
+    spec = Pi(_ANTHROPIC_CFG).build_spec(
+        "hi", timeout=30, skills=["skill-a", "skill-b"]
+    )
+    setup = spec.setup_command
+    assert "/home/node/.pi/agent/skills/skill-a/SKILL.md" in setup
+    assert "/home/node/.pi/agent/skills/skill-b/SKILL.md" in setup
+    # Two skills, each producing "mkdir … && cp …" (one &&), joined
+    # together (another &&) — exactly three separators.
+    assert setup.count(" && ") == 3
+
+
+def test_build_spec_skills_and_base_url_combine_in_setup_command(monkeypatch):
+    monkeypatch.setenv("PROVIDER_KEY", "sk-cloud-xyz")
+    cfg = ModelConfig(
+        "ollama/qwen2.5-coder:1.5b",
+        api_key_env="PROVIDER_KEY",
+        base_url="https://ollama.example/v1",
+    )
+    spec = Pi(cfg).build_spec("hi", timeout=30, skills=["add-operation"])
+    setup = spec.setup_command
+    # models.json snippet still present
+    assert "models.json" in setup
+    assert '"apiKey": "sk-cloud-xyz"' in setup
+    # skill copy snippet also present
+    assert "/home/node/.pi/agent/skills/add-operation/SKILL.md" in setup
+    # joined together
+    assert " && " in setup
+    # models.json must be written before skill copies, so Pi sees provider
+    # config first; lock that ordering down so a future reorder of
+    # setup_parts in build_spec doesn't silently break it.
+    assert setup.index("models.json") < setup.index("skills/add-operation")
+
+
+def test_build_spec_skill_name_is_shell_quoted():
+    # A skill name containing a space must be shell-quoted in the path so
+    # the cp/mkdir commands stay correct.
+    spec = Pi(_ANTHROPIC_CFG).build_spec("hi", timeout=30, skills=["weird name"])
+    assert "'weird name'" in spec.setup_command
