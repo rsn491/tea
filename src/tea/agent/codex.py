@@ -6,11 +6,14 @@ import shlex
 from tea.executor import DockerSpec, RawResult
 from tea.executor.docker import DockerExecutor
 
+from ._version import resolve_cli_version
 from .agent import Agent
 from .agent_run import AgentRun, Step
 from .harness import ApiKeyHarness, Harness
 
-_CODEX_IMAGE = "node:22"
+_NODE_VERSION = "22"
+_CODEX_PACKAGE = "@openai/codex"
+_CODEX_VERSION_ENV = "CODEX_VERSION"
 _DEFAULT_MODEL = "gpt-5.3-codex"
 
 
@@ -21,22 +24,40 @@ class Codex(Agent):
     def build_spec(
         self, prompt: str, timeout: int, skills: list[str] = ()
     ) -> DockerSpec:
-        env: dict[str, str] = {"HOME": "/home/node"}
+        npm_prefix = "/home/node/.npm-global"
+        env: dict[str, str] = {"HOME": "/home/node", "NPM_CONFIG_PREFIX": npm_prefix}
         if api_key := os.environ.get("OPENAI_API_KEY"):
             env["OPENAI_API_KEY"] = api_key
+
+        version = self.version()
+        image = f"tea-codex:{version}"
+
         return DockerSpec(
             command=(
-                f"codex exec"
+                f"{npm_prefix}/bin/codex exec"
                 f" --dangerously-bypass-approvals-and-sandbox"
                 f" --skip-git-repo-check --ephemeral"
                 f" -m {shlex.quote(self._model)}"
                 f' "{_esc(prompt)}"'
             ),
             setup_command=_skill_setup(skills) if skills else None,
+            dockerfile=self._dockerfile(version),
             env=env,
-            image=_CODEX_IMAGE,
+            image=image,
             user="node",
             timeout=timeout,
+        )
+
+    def _dockerfile(self, version: str) -> str:
+        return (
+            f"FROM node:{_NODE_VERSION}\n"
+            "ENV NPM_CONFIG_PREFIX=/home/node/.npm-global\n"
+            f"RUN npm install -g {_CODEX_PACKAGE}@{version} --quiet 2>/dev/null\n"
+        )
+
+    def version(self) -> str:
+        return resolve_cli_version(
+            "codex --version", _CODEX_PACKAGE, _CODEX_VERSION_ENV
         )
 
     def parse(self, raw: RawResult) -> AgentRun:

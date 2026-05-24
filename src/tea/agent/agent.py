@@ -16,6 +16,15 @@ class Agent(ABC):
     @abstractmethod
     def parse(self, raw: RawResult) -> AgentRun: ...
 
+    @abstractmethod
+    def version(self) -> str:
+        """Return the CLI tool version this agent will run inside Docker.
+
+        Resolution is agent-specific (env var override → CLI probe → npm → fallback).
+        Called lazily by ``build_spec()`` to build a versioned image tag.
+        """
+        ...
+
     def prepare_skills(self, prompt: str, workdir: str, skills: list[str]) -> str:
         """Host-side skill preparation called before the agent runs.
 

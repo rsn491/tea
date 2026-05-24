@@ -6,12 +6,15 @@ import os
 from tea.executor import DockerSpec, RawResult
 from tea.executor.docker import DockerExecutor
 
+from ._version import resolve_cli_version
 from .agent import Agent
 from .agent_run import AgentRun, Step, ToolCall
 from .harness import Harness
 from .model_config import ModelConfig
 
-_PI_IMAGE = "node:22"
+_NODE_VERSION = "22"
+_PI_PACKAGE = "pi"
+_PI_VERSION_ENV = "PI_VERSION"
 
 
 class Pi(Agent):
@@ -21,7 +24,8 @@ class Pi(Agent):
     def build_spec(
         self, prompt: str, timeout: int, skills: list[str] = ()
     ) -> DockerSpec:
-        env: dict[str, str] = {"HOME": "/home/node"}
+        npm_prefix = "/home/node/.npm-global"
+        env: dict[str, str] = {"HOME": "/home/node", "NPM_CONFIG_PREFIX": npm_prefix}
         api_key: str | None = None
         if self._model_config.api_key_env:
             if key := os.environ.get(self._model_config.api_key_env):
@@ -47,15 +51,19 @@ class Pi(Agent):
             )
             extra_hosts["host.docker.internal"] = "host-gateway"
 
+        version = self.version()
+        image = f"tea-pi:{version}"
+
         return DockerSpec(
             command=(
-                f"pi --mode json --no-extensions"
+                f"{npm_prefix}/bin/pi --mode json --no-extensions"
                 f" --model {self._model_config.model}"
                 f' "{_esc(prompt)}"'
             ),
             setup_command=setup_command,
+            dockerfile=self._dockerfile(version),
             env=env,
-            image=_PI_IMAGE,
+            image=image,
             user="node",
             timeout=timeout,
             extra_hosts=extra_hosts,
@@ -78,6 +86,16 @@ class Pi(Agent):
             f"Available skills:\n{listing}"
         )
         return f"{preamble}\n\n{prompt}"
+
+    def _dockerfile(self, version: str) -> str:
+        return (
+            f"FROM node:{_NODE_VERSION}\n"
+            "ENV NPM_CONFIG_PREFIX=/home/node/.npm-global\n"
+            f"RUN npm install -g {_PI_PACKAGE}@{version} --quiet 2>/dev/null\n"
+        )
+
+    def version(self) -> str:
+        return resolve_cli_version("pi --version", _PI_PACKAGE, _PI_VERSION_ENV)
 
     def parse(self, raw: RawResult) -> AgentRun:
         run = _parse(raw.stdout)

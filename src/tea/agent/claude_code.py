@@ -7,11 +7,14 @@ import shlex
 from tea.executor import DockerSpec, RawResult
 from tea.executor.docker import DockerExecutor
 
+from ._version import resolve_cli_version
 from .agent import Agent
 from .agent_run import AgentRun, Step, ToolCall
 from .harness import ApiKeyHarness, Harness
 
-_CLAUDE_IMAGE = "node:22"
+_NODE_VERSION = "22"
+_CLAUDE_CODE_PACKAGE = "@anthropic-ai/claude-code"
+_CLAUDE_CODE_VERSION_ENV = "CLAUDE_CODE_VERSION"
 _DEFAULT_MAX_TURNS = 25
 _DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 
@@ -53,6 +56,9 @@ class ClaudeCode(Agent):
             extra_volumes[host_claude_dir] = "/home/node/.claude"
         extra_volumes.update(self._extra_volumes)
 
+        version = self.version()
+        image = f"tea-claude-code:{version}"
+
         return DockerSpec(
             command=(
                 f"{npm_prefix}/bin/claude --dangerously-skip-permissions"
@@ -60,14 +66,24 @@ class ClaudeCode(Agent):
                 f" --max-turns {int(self._max_turns)}"
                 f' --print --output-format stream-json --verbose "{_esc(prompt)}"'
             ),
-            setup_command=(
-                "npm install -g @anthropic-ai/claude-code --quiet 2>/dev/null"
-            ),
+            dockerfile=self._dockerfile(version),
             env=env,
-            image=_CLAUDE_IMAGE,
+            image=image,
             user="node",
             timeout=timeout,
             extra_volumes=extra_volumes,
+        )
+
+    def _dockerfile(self, version: str) -> str:
+        return (
+            f"FROM node:{_NODE_VERSION}\n"
+            "ENV NPM_CONFIG_PREFIX=/home/node/.npm-global\n"
+            f"RUN npm install -g {_CLAUDE_CODE_PACKAGE}@{version} --quiet 2>/dev/null\n"
+        )
+
+    def version(self) -> str:
+        return resolve_cli_version(
+            "claude --version", _CLAUDE_CODE_PACKAGE, _CLAUDE_CODE_VERSION_ENV
         )
 
     def parse(self, raw: RawResult) -> AgentRun:

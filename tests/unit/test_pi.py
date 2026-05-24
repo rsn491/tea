@@ -1,31 +1,74 @@
 from __future__ import annotations
 
 import json
+from datetime import date
 
 import pytest
 
+from tea.agent._version import resolve_cli_version
 from tea.agent.agent_run import AgentRun
 from tea.agent.model_config import ModelConfig
-from tea.agent.pi import Pi, PiHarness, _build_models_json, _read_skill_description
+from tea.agent.pi import (
+    Pi,
+    PiHarness,
+    _build_models_json,
+    _read_skill_description,
+)
 from tea.executor import RawResult
 
 _ANTHROPIC_CFG = ModelConfig(
     "anthropic/claude-sonnet-4-6", api_key_env="ANTHROPIC_API_KEY"
 )
 
+# ── resolve_cli_version ───────────────────────────────────────────────────────
+
+
+def test_resolve_cli_version_uses_env_var(monkeypatch):
+    monkeypatch.setenv("PI_VERSION", "3.2.1")
+    resolve_cli_version.cache_clear()
+    assert resolve_cli_version("pi --version", "pi", "PI_VERSION") == "3.2.1"
+    resolve_cli_version.cache_clear()
+
+
+def test_resolve_cli_version_last_resort_is_latest_date(monkeypatch):
+    """When env var, CLI, and npm all fail the version is latest-<yyyyMMdd>."""
+    monkeypatch.delenv("PI_VERSION", raising=False)
+    resolve_cli_version.cache_clear()
+    # Use a nonsense CLI name so both the CLI and npm fallback fail
+    version = resolve_cli_version(
+        "__no_such_cli__ --version", "__no_such_pkg__", "PI_VERSION"
+    )
+    expected = f"latest-{date.today().strftime('%Y%m%d')}"
+    assert version == expected
+    resolve_cli_version.cache_clear()
+
+
+def test_pi_agent_version_uses_env_var(monkeypatch):
+    """Pi.version() delegates to resolve_cli_version and picks up the env var."""
+    monkeypatch.setenv("PI_VERSION", "9.8.7")
+    resolve_cli_version.cache_clear()
+    assert Pi(_ANTHROPIC_CFG).version() == "9.8.7"
+    resolve_cli_version.cache_clear()
+
+
 # ── build_spec ────────────────────────────────────────────────────────────────
 
 
 def test_build_spec_defaults_no_base_url(monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setenv("PI_VERSION", "1.0.0")
+    resolve_cli_version.cache_clear()
     spec = Pi(_ANTHROPIC_CFG).build_spec("hello", timeout=60)
 
-    assert spec.image == "node:22"
+    assert spec.image == "tea-pi:1.0.0"
     assert spec.user == "node"
     assert spec.timeout == 60
     assert spec.extra_hosts == {}
     assert spec.setup_command is None
+    assert "FROM node:22" in spec.dockerfile
+    assert "pi@1.0.0" in spec.dockerfile
     assert "--model anthropic/claude-sonnet-4-6" in spec.command
+    resolve_cli_version.cache_clear()
 
 
 def test_build_spec_forwards_api_key_env(monkeypatch):

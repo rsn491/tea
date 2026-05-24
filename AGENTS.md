@@ -93,6 +93,9 @@ Callers (`Harness`, `check_judge_task`) depend only on the ABCs, never on concre
 | Variable | Purpose |
 |---|---|
 | `CLAUDE_CODE_OAUTH_TOKEN` | Auth token for the ClaudeCode agent running inside Docker |
+| `CLAUDE_CODE_VERSION` | Pin the `@anthropic-ai/claude-code` version used inside Docker (auto-detected from `claude --version` / npm if unset) |
+| `CODEX_VERSION` | Pin the `@openai/codex` version used inside Docker (auto-detected from `codex --version` / npm if unset) |
+| `PI_VERSION` | Pin the `pi` version used inside Docker (auto-detected from `pi --version` / npm if unset) |
 | `TEA_JUDGE_MODEL` | Judge model (default: `anthropic:claude-haiku-4-5-20251001`) |
 | `TEA_JUDGE_BASE_URL` | When set, routes judge calls through an OpenAI-compatible endpoint (OpenRouter, Ollama, vLLM, etc.) |
 | `TEA_JUDGE_API_KEY` | API key for the above; defaults to `"local"` when base_url is set |

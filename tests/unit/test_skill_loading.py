@@ -103,6 +103,9 @@ class _MinimalAgent(Agent):
     def parse(self, raw: RawResult) -> AgentRun:
         raise NotImplementedError
 
+    def version(self) -> str:
+        raise NotImplementedError
+
 
 def test_agent_default_prepare_skills_is_noop():
     agent = _MinimalAgent()
