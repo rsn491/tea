@@ -21,7 +21,7 @@ _MODEL = os.environ["MODEL_PROVIDER_MODEL"]
 _BASE_URL = os.environ["MODEL_PROVIDER_BASE_URL"].rstrip("/") + "/v1"
 _API_KEY_ENV = "MODEL_PROVIDER_KEY"
 
-_pi = Agents(skills_dir="skills").Pi.with_model(
+_pi = Agents.Pi.with_model(
     ModelConfig(_MODEL, api_key_env=_API_KEY_ENV, base_url=_BASE_URL)
 )
 

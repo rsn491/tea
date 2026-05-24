@@ -14,7 +14,7 @@ from tea.agent.codex import Codex
 from tea.agent.harness import Harness
 from tea.agent.model_config import ModelConfig
 from tea.agent.pi import Pi
-from tea.agent.run_builder import _discover_skills
+from tea.agent.run_builder import RunBuilder, _discover_skills, _resolve_skill_sources
 from tea.executor import DockerSpec, ExecutionSpec, Executor, RawResult
 from tea.executor.docker import DockerExecutor
 
@@ -65,8 +65,62 @@ class _PromptCapturingAgent(Agent):
     def version(self) -> str:
         return "0.0.0"
 
-    def install_skills(self, spec, prompt, workdir, skills_dir, skills):
+    def install_skills(self, spec, prompt, workdir, skills, source_for):
         return spec, prompt
+
+
+# ── _resolve_skill_sources ────────────────────────────────────────────────────
+
+
+def test_resolve_sources_none_uses_defaults_present_on_disk():
+    """None falls back to agent defaults, filtered to those that exist."""
+    with tempfile.TemporaryDirectory() as workdir:
+        os.makedirs(os.path.join(workdir, ".claude/skills"))
+        # .agents/skills intentionally absent — should be silently skipped.
+        assert _resolve_skill_sources(
+            None, (".claude/skills", ".agents/skills"), workdir
+        ) == [".claude/skills"]
+
+
+def test_resolve_sources_none_returns_empty_when_no_defaults_present():
+    with tempfile.TemporaryDirectory() as workdir:
+        assert (
+            _resolve_skill_sources(None, (".claude/skills", ".agents/skills"), workdir)
+            == []
+        )
+
+
+def test_resolve_sources_empty_list_is_explicit_opt_out():
+    with tempfile.TemporaryDirectory() as workdir:
+        os.makedirs(os.path.join(workdir, ".claude/skills"))
+        assert _resolve_skill_sources([], (".claude/skills",), workdir) == []
+
+
+def test_resolve_sources_explicit_list_replaces_defaults():
+    with tempfile.TemporaryDirectory() as workdir:
+        os.makedirs(os.path.join(workdir, ".claude/skills"))
+        os.makedirs(os.path.join(workdir, "custom"))
+        assert _resolve_skill_sources(["custom"], (".claude/skills",), workdir) == [
+            "custom"
+        ]
+
+
+def test_resolve_sources_explicit_missing_path_raises():
+    """Explicit means explicit: a missing path is a configuration error."""
+    with tempfile.TemporaryDirectory() as workdir:
+        with pytest.raises(ValueError, match="does not exist"):
+            _resolve_skill_sources(["nope"], (), workdir)
+
+
+def test_resolve_sources_rejects_absolute_path():
+    with tempfile.TemporaryDirectory() as workdir:
+        with pytest.raises(ValueError, match="must be relative to workdir"):
+            _resolve_skill_sources(["/abs/skills"], (), workdir)
+
+
+def test_resolve_sources_returns_empty_for_none_workdir():
+    assert _resolve_skill_sources(None, (".claude/skills",), None) == []
+    assert _resolve_skill_sources(["custom"], (), None) == []
 
 
 # ── _discover_skills ──────────────────────────────────────────────────────────
@@ -76,47 +130,70 @@ def test_discover_skills_finds_skills_with_skill_md():
     with tempfile.TemporaryDirectory() as workdir:
         _make_skill(workdir, "alpha", "# Alpha", skills_dir="skills")
         _make_skill(workdir, "beta", "# Beta", skills_dir="skills")
-        skills = _discover_skills("skills", workdir)
+        skills, source_for = _discover_skills(["skills"], workdir)
     assert set(skills) == {"alpha", "beta"}
+    assert source_for == {"alpha": "skills", "beta": "skills"}
 
 
 def test_discover_skills_honours_user_chosen_dir_name():
-    """No magic default — discovery only looks where the user pointed it."""
+    """Discovery only looks where the caller pointed it."""
     with tempfile.TemporaryDirectory() as workdir:
         _make_skill(workdir, "in-claude", "x", skills_dir=".claude/skills")
         _make_skill(workdir, "in-custom", "x", skills_dir="eval-fixtures/skills")
-        assert _discover_skills(".claude/skills", workdir) == ["in-claude"]
-        assert _discover_skills("eval-fixtures/skills", workdir) == ["in-custom"]
+        skills, _ = _discover_skills([".claude/skills"], workdir)
+        assert skills == ["in-claude"]
+        skills, _ = _discover_skills(["eval-fixtures/skills"], workdir)
+        assert skills == ["in-custom"]
 
 
 def test_discover_skills_ignores_dirs_without_skill_md():
     with tempfile.TemporaryDirectory() as workdir:
         _make_skill(workdir, "valid", "# Valid", skills_dir="skills")
         os.makedirs(os.path.join(workdir, "skills", "empty-dir"))
-        skills = _discover_skills("skills", workdir)
+        skills, _ = _discover_skills(["skills"], workdir)
     assert skills == ["valid"]
 
 
-def test_discover_skills_returns_empty_when_no_skills_dir_on_disk():
+def test_discover_skills_returns_empty_when_source_absent_on_disk():
     with tempfile.TemporaryDirectory() as workdir:
-        assert _discover_skills("skills", workdir) == []
+        skills, source_for = _discover_skills(["skills"], workdir)
+    assert skills == [] and source_for == {}
 
 
-def test_discover_skills_returns_empty_when_skills_dir_unset():
-    """No user-supplied path means no skills loaded — tea has no default."""
+def test_discover_skills_returns_empty_when_no_sources():
     with tempfile.TemporaryDirectory() as workdir:
         _make_skill(workdir, "alpha", "x", skills_dir=".claude/skills")
-        assert _discover_skills(None, workdir) == []
+        skills, source_for = _discover_skills([], workdir)
+    assert skills == [] and source_for == {}
 
 
 def test_discover_skills_returns_empty_for_none_workdir():
-    assert _discover_skills("skills", None) == []
+    skills, source_for = _discover_skills(["skills"], None)
+    assert skills == [] and source_for == {}
 
 
-def test_discover_skills_rejects_absolute_path():
+def test_discover_skills_multi_source_merges():
     with tempfile.TemporaryDirectory() as workdir:
-        with pytest.raises(ValueError, match="must be relative to workdir"):
-            _discover_skills("/abs/path/skills", workdir)
+        _make_skill(workdir, "alpha", "x", skills_dir=".claude/skills")
+        _make_skill(workdir, "beta", "x", skills_dir=".agents/skills")
+        skills, source_for = _discover_skills(
+            [".claude/skills", ".agents/skills"], workdir
+        )
+    assert set(skills) == {"alpha", "beta"}
+    assert source_for["alpha"] == ".claude/skills"
+    assert source_for["beta"] == ".agents/skills"
+
+
+def test_discover_skills_conflict_first_source_wins():
+    """Same skill name in two sources: earlier wins, later is skipped."""
+    with tempfile.TemporaryDirectory() as workdir:
+        _make_skill(workdir, "dup", "claude version", skills_dir=".claude/skills")
+        _make_skill(workdir, "dup", "shared version", skills_dir=".agents/skills")
+        skills, source_for = _discover_skills(
+            [".claude/skills", ".agents/skills"], workdir
+        )
+    assert skills == ["dup"]
+    assert source_for == {"dup": ".claude/skills"}
 
 
 # ── Agent.install_skills is abstract — agents must implement it ──────────────
@@ -150,7 +227,7 @@ def test_harness_calls_install_skills_when_skills_and_workdir(tmp_path):
         timeout=30,
         workdir=str(tmp_path),
         skills=["s"],
-        skills_dir="skills",
+        source_for={"s": "skills"},
     )
     assert agent.received_prompt == "base prompt"
 
@@ -159,12 +236,12 @@ def test_harness_skips_install_skills_when_no_workdir():
     calls: list[tuple[Any, ...]] = []
 
     class _Counter(_PromptCapturingAgent):
-        def install_skills(self, spec, prompt, workdir, skills_dir, skills):
-            calls.append((spec, prompt, workdir, skills_dir, skills))
+        def install_skills(self, spec, prompt, workdir, skills, source_for):
+            calls.append((spec, prompt, workdir, skills, source_for))
             return spec, prompt
 
     Harness(_Counter(), _RecordingExecutor())._execute(
-        "p", timeout=30, workdir=None, skills=["a"], skills_dir="skills"
+        "p", timeout=30, workdir=None, skills=["a"], source_for={"a": "skills"}
     )
     assert calls == []
 
@@ -173,39 +250,45 @@ def test_harness_skips_install_skills_when_no_skills():
     calls: list[tuple[Any, ...]] = []
 
     class _Counter(_PromptCapturingAgent):
-        def install_skills(self, spec, prompt, workdir, skills_dir, skills):
-            calls.append((spec, prompt, workdir, skills_dir, skills))
+        def install_skills(self, spec, prompt, workdir, skills, source_for):
+            calls.append((spec, prompt, workdir, skills, source_for))
             return spec, prompt
 
     with tempfile.TemporaryDirectory() as workdir:
         Harness(_Counter(), _RecordingExecutor())._execute(
-            "p", timeout=30, workdir=workdir, skills=[], skills_dir="skills"
+            "p", timeout=30, workdir=workdir, skills=[], source_for={}
         )
     assert calls == []
 
 
-def test_harness_skips_install_skills_when_no_skills_dir():
-    calls: list[tuple[Any, ...]] = []
-
-    class _Counter(_PromptCapturingAgent):
-        def install_skills(self, spec, prompt, workdir, skills_dir, skills):
-            calls.append((spec, prompt, workdir, skills_dir, skills))
-            return spec, prompt
-
-    with tempfile.TemporaryDirectory() as workdir:
-        Harness(_Counter(), _RecordingExecutor())._execute(
-            "p", timeout=30, workdir=workdir, skills=["a"], skills_dir=None
-        )
-    assert calls == []
+# ── Harness threads skills_sources from the constructor ──────────────────────
 
 
-# ── Harness threads skills_dir from the constructor ──────────────────────────
-
-
-def test_harness_stores_skills_dir_for_run_builder():
+def test_harness_stores_skills_sources_for_run_builder():
     agent = _PromptCapturingAgent()
-    h = Harness(agent, _RecordingExecutor(), skills_dir="eval-fixtures/skills")
-    assert h.skills_dir == "eval-fixtures/skills"
+    h = Harness(agent, _RecordingExecutor(), skills_sources=["eval-fixtures/skills"])
+    assert h.skills_sources == ["eval-fixtures/skills"]
+
+
+def test_harness_default_skill_sources_reads_from_agent():
+    """The harness exposes the agent's class-level defaults to RunBuilder."""
+    h = Harness(ClaudeCode(), _RecordingExecutor())
+    assert h.default_skill_sources == (".claude/skills", ".agents/skills")
+
+
+# ── Default discovery per agent ──────────────────────────────────────────────
+
+
+def test_claude_code_default_sources():
+    assert ClaudeCode.DEFAULT_SKILL_SOURCES == (".claude/skills", ".agents/skills")
+
+
+def test_codex_default_sources():
+    assert Codex.DEFAULT_SKILL_SOURCES == (".codex/skills", ".agents/skills")
+
+
+def test_pi_default_sources():
+    assert Pi.DEFAULT_SKILL_SOURCES == (".pi/skills", ".agents/skills")
 
 
 # ── Regression: ClaudeCode/Codex must not crash with skills + workdir ────────
@@ -224,7 +307,7 @@ def test_claude_code_harness_with_skills_runs_install_skills(monkeypatch):
             timeout=30,
             workdir=workdir,
             skills=["regression"],
-            skills_dir="skills",
+            source_for={"regression": "skills"},
         )
     spec = executor.spec
     assert isinstance(spec, DockerSpec)
@@ -245,7 +328,7 @@ def test_codex_harness_with_skills_runs_install_skills(monkeypatch):
             timeout=30,
             workdir=workdir,
             skills=["skill-x"],
-            skills_dir="skills",
+            source_for={"skill-x": "skills"},
         )
 
     spec = executor.spec
@@ -263,7 +346,11 @@ def test_codex_install_skills_adds_mkdir_and_cp(monkeypatch):
     assert base.setup_command is None  # no skill commands in base spec
 
     spec, prompt = Codex().install_skills(
-        base, "do stuff", "/tmp/anywhere", "skills", ["add-new-operation"]
+        base,
+        "do stuff",
+        "/tmp/anywhere",
+        ["add-new-operation"],
+        {"add-new-operation": "skills"},
     )
 
     assert prompt == "do stuff"  # codex doesn't touch the prompt
@@ -275,20 +362,27 @@ def test_codex_install_skills_adds_mkdir_and_cp(monkeypatch):
     ) in spec.setup_command
 
 
-def test_codex_install_skills_uses_supplied_skills_dir(monkeypatch):
-    """Codex copies from the user-chosen source path, not a hardcoded one."""
+def test_codex_install_skills_uses_per_skill_source_path(monkeypatch):
+    """Codex copies each skill from its own discovered source."""
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     base = Codex().build_spec("do stuff", 60)
     spec, _ = Codex().install_skills(
-        base, "do stuff", "/tmp/x", "eval-fixtures/skills", ["a"]
+        base,
+        "do stuff",
+        "/tmp/x",
+        ["a", "b"],
+        {"a": ".codex/skills", "b": ".agents/skills"},
     )
-    assert "cp /workspace/eval-fixtures/skills/a/SKILL.md" in spec.setup_command
+    assert "cp /workspace/.codex/skills/a/SKILL.md" in spec.setup_command
+    assert "cp /workspace/.agents/skills/b/SKILL.md" in spec.setup_command
 
 
 def test_codex_install_skills_multiple_skills(monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     base = Codex().build_spec("do stuff", 60)
-    spec, _ = Codex().install_skills(base, "do stuff", "/tmp/x", "skills", ["a", "b"])
+    spec, _ = Codex().install_skills(
+        base, "do stuff", "/tmp/x", ["a", "b"], {"a": "skills", "b": "skills"}
+    )
     assert "cp /workspace/skills/a/SKILL.md" in spec.setup_command
     assert "cp /workspace/skills/b/SKILL.md" in spec.setup_command
 
@@ -297,7 +391,7 @@ def test_codex_install_skills_preserves_existing_setup(monkeypatch):
     """If build_spec ever grows other setup, install_skills chains, not replaces."""
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     base = replace(Codex().build_spec("hi", 60), setup_command="echo prelude")
-    spec, _ = Codex().install_skills(base, "hi", "/tmp/x", "skills", ["s"])
+    spec, _ = Codex().install_skills(base, "hi", "/tmp/x", ["s"], {"s": "skills"})
 
     assert spec.setup_command.startswith("echo prelude && ")
     assert "/home/node/.codex/skills/s" in spec.setup_command
@@ -312,7 +406,7 @@ def test_claude_code_install_skills_copies_into_native_path(monkeypatch):
     monkeypatch.setattr(os.path, "isfile", lambda p: False)
     base = ClaudeCode().build_spec("hi", 60)
     spec, prompt = ClaudeCode().install_skills(
-        base, "hi", "/tmp/anywhere", "skills", ["my-skill"]
+        base, "hi", "/tmp/anywhere", ["my-skill"], {"my-skill": "skills"}
     )
     assert prompt == "hi"
     assert spec.setup_command is not None
@@ -323,16 +417,41 @@ def test_claude_code_install_skills_copies_into_native_path(monkeypatch):
 
 
 def test_claude_code_install_skills_skips_copy_when_source_is_native(monkeypatch):
-    """If the user already chose the native location, no shell prelude needed."""
+    """If every skill came from the native location, no shell prelude needed."""
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("CLAUDE_CODE_OAUTH_TOKEN", raising=False)
     monkeypatch.setattr(os.path, "isfile", lambda p: False)
     base = ClaudeCode().build_spec("hi", 60)
     spec, prompt = ClaudeCode().install_skills(
-        base, "hi", "/tmp/anywhere", ".claude/skills", ["my-skill"]
+        base, "hi", "/tmp/anywhere", ["my-skill"], {"my-skill": ".claude/skills"}
     )
     assert spec is base
     assert prompt == "hi"
+
+
+def test_claude_code_install_skills_mixed_sources(monkeypatch):
+    """Native-path skill skipped; non-native skill still gets a cp."""
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("CLAUDE_CODE_OAUTH_TOKEN", raising=False)
+    monkeypatch.setattr(os.path, "isfile", lambda p: False)
+    base = ClaudeCode().build_spec("hi", 60)
+    spec, _ = ClaudeCode().install_skills(
+        base,
+        "hi",
+        "/tmp/x",
+        ["native", "shared"],
+        {"native": ".claude/skills", "shared": ".agents/skills"},
+    )
+    assert spec.setup_command is not None
+    # The native skill is not copied (it already lives where Claude looks).
+    assert "/workspace/.claude/skills/native/SKILL.md" not in (
+        spec.setup_command.replace("/workspace/.claude/skills/shared/SKILL.md", "")
+    )
+    # The shared skill is translated to the native path.
+    assert (
+        "cp /workspace/.agents/skills/shared/SKILL.md"
+        " /workspace/.claude/skills/shared/SKILL.md"
+    ) in spec.setup_command
 
 
 # ── ClaudeCode public properties ─────────────────────────────────────────────
@@ -395,11 +514,11 @@ def test_claude_code_harness_with_api_key_threads_model_and_turns():
     assert inner.max_turns == 3
 
 
-def test_claude_code_harness_with_api_key_threads_skills_dir():
+def test_claude_code_harness_with_api_key_threads_skills_sources():
     harness = ClaudeCodeHarness(
-        ClaudeCode(), DockerExecutor(), skills_dir="eval/skills"
+        ClaudeCode(), DockerExecutor(), skills_sources=["eval/skills"]
     ).with_api_key()
-    assert harness.skills_dir == "eval/skills"
+    assert harness.skills_sources == ["eval/skills"]
 
 
 # ── shell-injection regression tests ─────────────────────────────────────────
@@ -423,7 +542,11 @@ def test_codex_skill_name_injection_is_quoted(monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     base = Codex().build_spec("task", 60)
     spec, _ = Codex().install_skills(
-        base, "task", "/tmp/x", "skills", ["skill; echo hacked"]
+        base,
+        "task",
+        "/tmp/x",
+        ["skill; echo hacked"],
+        {"skill; echo hacked": "skills"},
     )
     assert spec.setup_command is not None
     assert "'skill; echo hacked'" in spec.setup_command
@@ -445,10 +568,122 @@ def test_pi_install_skills_modifies_prompt_not_spec(tmp_path):
     pi = Pi(cfg)
     base_spec = DockerSpec(command="noop", image="x")
     spec, prompt = pi.install_skills(
-        base_spec, "Do the task", str(tmp_path), "skills", ["add-operation"]
+        base_spec,
+        "Do the task",
+        str(tmp_path),
+        ["add-operation"],
+        {"add-operation": "skills"},
     )
     assert spec is base_spec  # Pi delivers via prompt, not spec
     assert "Available skills:" in prompt
     assert "add-operation: How to add an operation" in prompt
     assert "skills/add-operation/SKILL.md" in prompt
     assert prompt.endswith("Do the task")
+
+
+# ── End-to-end RunBuilder behaviour ──────────────────────────────────────────
+
+
+class _RecordingRunner:
+    """Tiny stand-in for the harness that records what _execute received."""
+
+    def __init__(
+        self, skills_sources: list[str] | None, defaults: tuple[str, ...]
+    ) -> None:
+        self.skills_sources = skills_sources
+        self.default_skill_sources = defaults
+        self.last_call: dict[str, Any] = {}
+
+    def _execute(self, text, *, timeout, workdir, skills, source_for):
+        self.last_call = {
+            "text": text,
+            "workdir": workdir,
+            "skills": list(skills),
+            "source_for": dict(source_for),
+        }
+        return AgentRun(raw="", steps=[], tools=[], skills=[])
+
+
+def _make_runner(skills_sources: list[str] | None, defaults: tuple[str, ...]):
+    return _RecordingRunner(skills_sources, defaults)
+
+
+def test_run_builder_uses_agent_defaults_when_sources_unset(tmp_path):
+    """No explicit sources → search the agent's conventional paths."""
+
+    _make_skill(str(tmp_path), "hello", "x", skills_dir=".claude/skills")
+    runner = _make_runner(None, (".claude/skills", ".agents/skills"))
+    RunBuilder.prompt(runner, "do thing").workdir(str(tmp_path)).run()
+
+    assert runner.last_call["skills"] == ["hello"]
+    assert runner.last_call["source_for"] == {"hello": ".claude/skills"}
+
+
+def test_run_builder_explicit_sources_replaces_defaults(tmp_path):
+
+    # Default location has a skill that should be IGNORED because the user
+    # passed an explicit source list.
+    _make_skill(str(tmp_path), "default-only", "x", skills_dir=".claude/skills")
+    _make_skill(str(tmp_path), "chosen", "x", skills_dir="custom")
+
+    runner = _make_runner(["custom"], (".claude/skills", ".agents/skills"))
+    RunBuilder.prompt(runner, "do thing").workdir(str(tmp_path)).run()
+
+    assert runner.last_call["skills"] == ["chosen"]
+    assert runner.last_call["source_for"] == {"chosen": "custom"}
+
+
+def test_run_builder_skills_from_empty_list_disables_loading(tmp_path):
+
+    _make_skill(str(tmp_path), "hello", "x", skills_dir=".claude/skills")
+    runner = _make_runner(None, (".claude/skills",))
+    RunBuilder.prompt(runner, "do thing").workdir(str(tmp_path)).skills_from([]).run()
+
+    assert runner.last_call["skills"] == []
+    assert runner.last_call["source_for"] == {}
+
+
+def test_run_builder_skills_from_string_normalises_to_list(tmp_path):
+    """Passing a single path string is a convenience for ``[path]``."""
+
+    _make_skill(str(tmp_path), "alpha", "x", skills_dir="custom")
+    runner = _make_runner(None, ())
+    RunBuilder.prompt(runner, "do thing").workdir(str(tmp_path)).skills_from(
+        "custom"
+    ).run()
+
+    assert runner.last_call["skills"] == ["alpha"]
+    assert runner.last_call["source_for"] == {"alpha": "custom"}
+
+
+def test_run_builder_symlinked_skill_lands_as_real_file(tmp_path):
+    """A symlinked skill bundle must be dereferenced into the tmp workdir copy
+    so it survives the bind mount into the container."""
+
+    # Real skill content lives outside the workdir.
+    external = tmp_path / "external" / "extskill"
+    external.mkdir(parents=True)
+    (external / "SKILL.md").write_text("# external\n")
+
+    workdir = tmp_path / "workdir"
+    (workdir / ".claude" / "skills").mkdir(parents=True)
+    os.symlink(str(external), str(workdir / ".claude" / "skills" / "extskill"))
+
+    seen: dict[str, Any] = {}
+
+    class _Stub:
+        skills_sources = None
+        default_skill_sources = (".claude/skills",)
+
+        def _execute(self, text, *, timeout, workdir, skills, source_for):
+            seen["workdir"] = workdir
+            seen["skill_md_is_real"] = os.path.isfile(
+                os.path.join(workdir, ".claude/skills/extskill/SKILL.md")
+            ) and not os.path.islink(os.path.join(workdir, ".claude/skills/extskill"))
+            seen["skills"] = list(skills)
+            return AgentRun(raw="", steps=[], tools=[], skills=[])
+
+    RunBuilder.prompt(_Stub(), "do thing").workdir(str(workdir)).run()
+
+    assert seen["skills"] == ["extskill"]
+    assert seen["skill_md_is_real"] is True

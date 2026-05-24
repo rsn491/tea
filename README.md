@@ -113,6 +113,48 @@ Agents.Pi.with_model(ModelConfig(
 
 ---
 
+## Skills
+
+Tea discovers project skills automatically from conventional, in-workdir paths
+and copies them into the agent's native skill directory in the container.
+
+| Agent | Default sources (searched in order) |
+|---|---|
+| ClaudeCode | `.claude/skills`, `.agents/skills` |
+| Codex | `.codex/skills`, `.agents/skills` |
+| Pi | `.pi/skills`, `.agents/skills` |
+
+`.agents/skills` is the cross-agent convention — put a skill there and every
+agent picks it up. Missing default paths are silently skipped. If the same
+skill name appears in multiple sources, the earlier (agent-specific) source
+wins.
+
+Override the defaults with `skills_sources`:
+
+```python
+# One or more custom source paths (relative to the run's workdir).
+Agents(skills_sources=["eval-fixtures/skills"])
+
+# Per-run override.
+Agents.ClaudeCode.prompt("...").workdir(".").skills_from(["custom/skills"]).run()
+
+# Explicit opt-out: load no skills at all.
+Agents(skills_sources=[])
+```
+
+Each skill is a directory containing a `SKILL.md` file with frontmatter:
+
+```markdown
+---
+name: add-new-operation
+description: How to add a new arithmetic operation to the calculator.
+---
+
+Step-by-step instructions live in the body of the file.
+```
+
+---
+
 ## Development
 
 ```bash

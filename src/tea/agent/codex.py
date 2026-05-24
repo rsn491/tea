@@ -22,6 +22,8 @@ _CONTAINER_WORKDIR = "/workspace"
 
 
 class Codex(Agent):
+    DEFAULT_SKILL_SOURCES = (".codex/skills", ".agents/skills")
+
     def __init__(self, model: str = _DEFAULT_MODEL) -> None:
         self._model = model
 
@@ -54,17 +56,17 @@ class Codex(Agent):
         spec: DockerSpec,
         prompt: str,
         workdir: str,
-        skills_dir: str,
         skills: list[str],
+        source_for: dict[str, str],
     ) -> tuple[DockerSpec, str]:
         """Copy project skills from the mounted workdir into Codex's native path.
 
         Codex loads skills from ``~/.codex/skills/<name>/SKILL.md``. The workdir
-        is mounted at ``/workspace``, so each ``SKILL.md`` is read from
-        ``/workspace/<skills_dir>/<name>/SKILL.md`` and copied into Codex's
-        skill directory at container start.
+        is mounted at ``/workspace``, so each ``SKILL.md`` is read from the
+        source path it was discovered in (``/workspace/<source_for[name]>/``)
+        and copied into Codex's skill directory at container start.
         """
-        skill_cmd = _skill_setup(skills, skills_dir)
+        skill_cmd = _skill_setup(skills, source_for)
         merged_setup = (
             f"{spec.setup_command} && {skill_cmd}" if spec.setup_command else skill_cmd
         )
@@ -94,18 +96,22 @@ class Codex(Agent):
 class CodexHarness(ApiKeyHarness):
     def with_api_key(self) -> Harness:
         model = self._agent._model if isinstance(self._agent, Codex) else _DEFAULT_MODEL
-        return Harness(Codex(model=model), DockerExecutor(), skills_dir=self.skills_dir)
+        return Harness(
+            Codex(model=model),
+            DockerExecutor(),
+            skills_sources=self.skills_sources,
+        )
 
 
-def _skill_setup(skills: list[str], skills_dir: str) -> str:
+def _skill_setup(skills: list[str], source_for: dict[str, str]) -> str:
     """Build the shell prelude that installs skills into ``~/.codex/skills/``.
 
-    Reads ``/workspace/<skills_dir>/<name>/SKILL.md`` (mounted workdir) and
-    copies into Codex's native location so the CLI picks them up.
+    Reads ``/workspace/<source_for[name]>/<name>/SKILL.md`` (mounted workdir)
+    and copies into Codex's native location so the CLI picks them up.
     """
-    src_base = f"{_CONTAINER_WORKDIR}/{skills_dir}"
     cmds = []
     for name in skills:
+        src_base = f"{_CONTAINER_WORKDIR}/{source_for[name]}"
         quoted = shlex.quote(name)
         src = f"{shlex.quote(src_base)}/{quoted}/SKILL.md"
         dst_dir = f"/home/node/.codex/skills/{quoted}"

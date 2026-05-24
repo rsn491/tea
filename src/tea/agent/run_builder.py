@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import difflib
+import logging
 import os
 import shutil
 import tempfile
@@ -11,9 +12,12 @@ from tea.tui.metrics import print_metrics
 
 from .agent_run import AgentRun, FileChange, FileDiff
 
+_log = logging.getLogger(__name__)
+
 
 class _Runnable(Protocol):
-    skills_dir: str | None
+    skills_sources: list[str] | None
+    default_skill_sources: tuple[str, ...]
 
     def _execute(
         self,
@@ -22,7 +26,7 @@ class _Runnable(Protocol):
         timeout: int,
         workdir: str | None,
         skills: list[str],
-        skills_dir: str | None,
+        source_for: dict[str, str],
     ) -> AgentRun: ...
 
 
@@ -36,28 +40,43 @@ class RunBuilder:
         self._text = text
         self._timeout = timeout
         self._workdir: str | None = None
-        self._skills_dir: str | None = getattr(runner, "skills_dir", None)
+        self._skills_sources: list[str] | None = getattr(runner, "skills_sources", None)
+        self._defaults: tuple[str, ...] = getattr(runner, "default_skill_sources", ())
 
     def workdir(self, path: str) -> RunBuilder:
         self._workdir = os.path.abspath(path)
         return self
 
-    def skills_from(self, path: str) -> RunBuilder:
-        """Override the suite-level ``skills_dir`` for this single run.
+    def skills_from(self, sources: str | list[str] | None) -> RunBuilder:
+        """Override the suite-level skill sources for this single run.
 
-        ``path`` is interpreted relative to the run's ``workdir`` (the same
-        convention as the harness-level ``skills_dir``).
+        Accepts a single relative path or a list of relative paths (each
+        interpreted relative to the run's ``workdir``). Passing ``[]``
+        disables skill loading; passing ``None`` re-enables the agent's
+        default discovery.
         """
-        self._skills_dir = path
+        if sources is None:
+            self._skills_sources = None
+        elif isinstance(sources, str):
+            self._skills_sources = [sources]
+        else:
+            self._skills_sources = list(sources)
         return self
 
     def run(self) -> AgentRun:
         tmp_dir: str | None = None
         if self._workdir:
             tmp_dir = tempfile.mkdtemp()
+            # symlinks=False (the default) dereferences symlinks so symlinked
+            # skill bundles land in the tmp copy as real files. Required for
+            # the bind mount, since symlink targets outside the workdir would
+            # be unreachable inside the container.
             shutil.copytree(self._workdir, tmp_dir, dirs_exist_ok=True)
         effective_workdir = tmp_dir if tmp_dir else self._workdir
-        skills = _discover_skills(self._skills_dir, effective_workdir)
+        sources = _resolve_skill_sources(
+            self._skills_sources, self._defaults, effective_workdir
+        )
+        skills, source_for = _discover_skills(sources, effective_workdir)
         try:
             before = _snapshot(self._workdir)
             result = self._runner._execute(
@@ -65,7 +84,7 @@ class RunBuilder:
                 timeout=self._timeout,
                 workdir=effective_workdir,
                 skills=skills,
-                skills_dir=self._skills_dir,
+                source_for=source_for,
             )
             after = _snapshot(effective_workdir)
             result._files_changed_fn = lambda: _diff_snapshots(before, after)
@@ -84,28 +103,74 @@ class RunBuilder:
 # helpers
 
 
-def _discover_skills(skills_dir: str | None, workdir: str | None) -> list[str]:
-    """Scan ``<workdir>/<skills_dir>/*/SKILL.md`` and return the skill names.
+def _resolve_skill_sources(
+    skills_sources: list[str] | None,
+    defaults: tuple[str, ...],
+    workdir: str | None,
+) -> list[str]:
+    """Decide which source paths to scan.
 
-    ``skills_dir`` is the user-supplied source path; tea imposes no default. If
-    either argument is missing, no skills are loaded. Absolute ``skills_dir``
-    paths are rejected — skills must live inside the workdir so they ride the
-    workdir bind mount into the container.
+    Rules:
+    * ``skills_sources is None``: fall back to the agent's defaults, filtered
+      to those that exist on disk under ``workdir`` (conventional paths are a
+      hint, not a contract — missing ones are silently skipped).
+    * ``skills_sources == []``: explicit opt-out, no skills loaded.
+    * Otherwise: use the supplied list verbatim. Each path is validated as
+      relative; missing paths raise (explicit means explicit).
     """
-    if not skills_dir or not workdir:
+    if not workdir:
         return []
-    if os.path.isabs(skills_dir):
-        raise ValueError(
-            f"skills_dir must be relative to workdir; got absolute path {skills_dir!r}"
-        )
-    full = os.path.join(workdir, skills_dir)
-    if not os.path.isdir(full):
+    if skills_sources is None:
+        return [src for src in defaults if os.path.isdir(os.path.join(workdir, src))]
+    if not skills_sources:
         return []
-    return [
-        entry.name
-        for entry in os.scandir(full)
-        if entry.is_dir() and os.path.isfile(os.path.join(entry.path, "SKILL.md"))
-    ]
+    for src in skills_sources:
+        if os.path.isabs(src):
+            raise ValueError(
+                f"skill source must be relative to workdir; got absolute path {src!r}"
+            )
+        if not os.path.isdir(os.path.join(workdir, src)):
+            raise ValueError(
+                f"skill source {src!r} does not exist under workdir {workdir!r}"
+            )
+    return list(skills_sources)
+
+
+def _discover_skills(
+    sources: list[str], workdir: str | None
+) -> tuple[list[str], dict[str, str]]:
+    """Scan each source for ``<source>/*/SKILL.md`` directories.
+
+    Returns ``(skills, source_for)`` where ``skills`` is the ordered list of
+    discovered skill names and ``source_for`` maps each name to the source it
+    was found in. When the same skill name appears in multiple sources, the
+    earlier source wins (and the later occurrence is logged and skipped).
+    """
+    if not workdir or not sources:
+        return [], {}
+    skills: list[str] = []
+    source_for: dict[str, str] = {}
+    for src in sources:
+        full = os.path.join(workdir, src)
+        if not os.path.isdir(full):
+            continue
+        for entry in os.scandir(full):
+            if not entry.is_dir():
+                continue
+            if not os.path.isfile(os.path.join(entry.path, "SKILL.md")):
+                continue
+            name = entry.name
+            if name in source_for:
+                _log.info(
+                    "skill %r already discovered in %r; skipping duplicate in %r",
+                    name,
+                    source_for[name],
+                    src,
+                )
+                continue
+            skills.append(name)
+            source_for[name] = src
+    return skills, source_for
 
 
 def _snapshot(path: str | None) -> dict[str, str]:

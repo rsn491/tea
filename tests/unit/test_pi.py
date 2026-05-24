@@ -230,7 +230,11 @@ def test_install_skills_prepends_listing(tmp_path):
     )
     spec = _empty_spec()
     out_spec, prompt = Pi(_ANTHROPIC_CFG).install_skills(
-        spec, "Do the task", str(tmp_path), "skills", ["add-operation"]
+        spec,
+        "Do the task",
+        str(tmp_path),
+        ["add-operation"],
+        {"add-operation": "skills"},
     )
     assert out_spec is spec  # Pi delivers via prompt, not spec
     assert "Available skills:" in prompt
@@ -242,7 +246,7 @@ def test_install_skills_prepends_listing(tmp_path):
 def test_install_skills_no_skills_returns_prompt_unchanged():
     spec = _empty_spec()
     out_spec, prompt = Pi(_ANTHROPIC_CFG).install_skills(
-        spec, "Do the task", "/some/dir", "skills", []
+        spec, "Do the task", "/some/dir", [], {}
     )
     assert out_spec is spec
     assert prompt == "Do the task"
@@ -254,22 +258,31 @@ def test_install_skills_multiple_skills(tmp_path):
         d.mkdir(parents=True)
         (d / "SKILL.md").write_text(f"---\ndescription: {desc}\n---\n")
     _, prompt = Pi(_ANTHROPIC_CFG).install_skills(
-        _empty_spec(), "Task", str(tmp_path), "skills", ["skill-a", "skill-b"]
+        _empty_spec(),
+        "Task",
+        str(tmp_path),
+        ["skill-a", "skill-b"],
+        {"skill-a": "skills", "skill-b": "skills"},
     )
     assert "skill-a: First skill" in prompt
     assert "skill-b: Second skill" in prompt
 
 
-def test_install_skills_advertises_user_chosen_path(tmp_path):
-    """The in-container path in the preamble matches the user's skills_dir."""
-    d = tmp_path / "eval-fixtures" / "skills" / "alpha"
-    d.mkdir(parents=True)
-    (d / "SKILL.md").write_text("---\ndescription: alpha skill\n---\n")
+def test_install_skills_advertises_per_skill_source(tmp_path):
+    """The in-container path reflects the source each skill was discovered in."""
+    claude = tmp_path / ".claude" / "skills" / "alpha"
+    claude.mkdir(parents=True)
+    (claude / "SKILL.md").write_text("---\ndescription: alpha skill\n---\n")
+    shared = tmp_path / ".agents" / "skills" / "beta"
+    shared.mkdir(parents=True)
+    (shared / "SKILL.md").write_text("---\ndescription: beta skill\n---\n")
+
     _, prompt = Pi(_ANTHROPIC_CFG).install_skills(
         _empty_spec(),
         "Task",
         str(tmp_path),
-        "eval-fixtures/skills",
-        ["alpha"],
+        ["alpha", "beta"],
+        {"alpha": ".pi/skills", "beta": ".agents/skills"},
     )
-    assert "eval-fixtures/skills/alpha/SKILL.md" in prompt
+    assert ".pi/skills/alpha/SKILL.md" in prompt
+    assert ".agents/skills/beta/SKILL.md" in prompt

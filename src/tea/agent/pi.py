@@ -18,6 +18,8 @@ _PI_VERSION_ENV = "PI_VERSION"
 
 
 class Pi(Agent):
+    DEFAULT_SKILL_SOURCES = (".pi/skills", ".agents/skills")
+
     def __init__(self, model_config: ModelConfig) -> None:
         self._model_config = model_config
 
@@ -74,22 +76,23 @@ class Pi(Agent):
         spec: DockerSpec,
         prompt: str,
         workdir: str,
-        skills_dir: str,
         skills: list[str],
+        source_for: dict[str, str],
     ) -> tuple[DockerSpec, str]:
         """Prepend a skill listing to the prompt — Pi has no native skill loader.
 
         Reads each ``SKILL.md``'s frontmatter ``description`` from the host
         workdir so the agent sees titles, descriptions, and the in-container
-        relative paths it can read on demand. Paths advertised in the preamble
-        are relative to the container cwd (``/workspace``) and match the
-        user-configured ``skills_dir``.
+        relative paths it can read on demand. Each path in the preamble is
+        relative to the container cwd (``/workspace``) and reflects the source
+        the skill was discovered in.
         """
         entries = []
         for name in skills:
-            skill_path = os.path.join(workdir, skills_dir, name, "SKILL.md")
+            src_dir = source_for[name]
+            skill_path = os.path.join(workdir, src_dir, name, "SKILL.md")
             description = _read_skill_description(skill_path)
-            rel_path = f"{skills_dir}/{name}/SKILL.md"
+            rel_path = f"{src_dir}/{name}/SKILL.md"
             entries.append(f"- {name}: {description}\n  Path: {rel_path}")
         if not entries:
             return spec, prompt
@@ -130,14 +133,16 @@ class PiHarness:
     ``Agents.Pi.with_model(config).prompt(...)``.
     """
 
-    def __init__(self, *, skills_dir: str | None = None) -> None:
-        self._skills_dir = skills_dir
+    def __init__(self, *, skills_sources: list[str] | None = None) -> None:
+        self._skills_sources = (
+            list(skills_sources) if skills_sources is not None else None
+        )
 
     def with_model(self, config: ModelConfig) -> Harness:
         return Harness(
             Pi(model_config=config),
             DockerExecutor(),
-            skills_dir=self._skills_dir,
+            skills_sources=self._skills_sources,
         )
 
 

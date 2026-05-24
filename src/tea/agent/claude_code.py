@@ -26,6 +26,8 @@ _CLAUDE_NATIVE_PROJECT_SKILLS = ".claude/skills"
 
 
 class ClaudeCode(Agent):
+    DEFAULT_SKILL_SOURCES = (".claude/skills", ".agents/skills")
+
     def __init__(
         self,
         model: str = _DEFAULT_MODEL,
@@ -86,29 +88,29 @@ class ClaudeCode(Agent):
         spec: DockerSpec,
         prompt: str,
         workdir: str,
-        skills_dir: str,
         skills: list[str],
+        source_for: dict[str, str],
     ) -> tuple[DockerSpec, str]:
         """Materialise skills into ``/workspace/.claude/skills/`` for Claude Code.
 
         Claude Code's CLI auto-discovers project skills from ``<cwd>/.claude/skills/``.
-        Tea's container cwd is ``/workspace`` (the bind-mounted workdir copy). If
-        the user already points ``skills_dir`` at the native location, the copy
-        is a no-op — otherwise a setup command translates from the chosen source
-        to the path the CLI scans.
+        Tea's container cwd is ``/workspace`` (the bind-mounted workdir copy).
+        Skills discovered in that native path need no copy; skills from any
+        other source are translated into the path the CLI scans.
         """
-        if os.path.normpath(skills_dir) == _CLAUDE_NATIVE_PROJECT_SKILLS:
-            return spec, prompt
-
-        src_base = f"{_CONTAINER_WORKDIR}/{skills_dir}"
         dst_base = f"{_CONTAINER_WORKDIR}/{_CLAUDE_NATIVE_PROJECT_SKILLS}"
-        cmds = [f"mkdir -p {shlex.quote(dst_base)}"]
+        cmds: list[str] = []
         for name in skills:
+            src_dir = source_for[name]
+            if os.path.normpath(src_dir) == _CLAUDE_NATIVE_PROJECT_SKILLS:
+                continue
             q = shlex.quote(name)
-            src = f"{shlex.quote(src_base)}/{q}/SKILL.md"
+            src = f"{shlex.quote(f'{_CONTAINER_WORKDIR}/{src_dir}')}/{q}/SKILL.md"
             dst_dir = f"{shlex.quote(dst_base)}/{q}"
             cmds.append(f"mkdir -p {dst_dir} && cp {src} {dst_dir}/SKILL.md")
-        skill_cmd = " && ".join(cmds)
+        if not cmds:
+            return spec, prompt
+        skill_cmd = f"mkdir -p {shlex.quote(dst_base)} && " + " && ".join(cmds)
         merged = (
             f"{spec.setup_command} && {skill_cmd}" if spec.setup_command else skill_cmd
         )
@@ -209,7 +211,7 @@ class ClaudeCodeHarness(ApiKeyHarness):
         return Harness(
             ClaudeCode(model=model, max_turns=max_turns),
             DockerExecutor(),
-            skills_dir=self.skills_dir,
+            skills_sources=self.skills_sources,
         )
 
 
