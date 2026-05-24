@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
+from dataclasses import replace
 
 from tea.executor import DockerSpec, RawResult
 from tea.executor.docker import DockerExecutor
@@ -15,6 +17,13 @@ from .model_config import ModelConfig
 _NODE_VERSION = "22"
 _PI_PACKAGE = "pi"
 _PI_VERSION_ENV = "PI_VERSION"
+
+# DockerExecutor mounts the workdir at this path; install_skills relies on it.
+_CONTAINER_WORKDIR = "/workspace"
+# Where Pi auto-discovers user-level skills inside the container — see
+# https://pi.dev/docs/latest/skills (directories containing SKILL.md are
+# scanned recursively).
+_PI_NATIVE_SKILLS_DIR = "/home/node/.pi/agent/skills"
 
 
 class Pi(Agent):
@@ -79,31 +88,20 @@ class Pi(Agent):
         skills: list[str],
         source_for: dict[str, str],
     ) -> tuple[DockerSpec, str]:
-        """Prepend a skill listing to the prompt — Pi has no native skill loader.
+        """Copy project skills into Pi's native discovery path.
 
-        Reads each ``SKILL.md``'s frontmatter ``description`` from the host
-        workdir so the agent sees titles, descriptions, and the in-container
-        relative paths it can read on demand. Each path in the preamble is
-        relative to the container cwd (``/workspace``) and reflects the source
-        the skill was discovered in.
+        Pi auto-discovers skills from ``~/.pi/agent/skills/<name>/SKILL.md``
+        at startup. The workdir is mounted at ``/workspace``, so each
+        ``SKILL.md`` is copied from its discovered source via a setup command
+        and the prompt is returned unmodified.
         """
-        entries = []
-        for name in skills:
-            src_dir = source_for[name]
-            skill_path = os.path.join(workdir, src_dir, name, "SKILL.md")
-            description = _read_skill_description(skill_path)
-            rel_path = f"{src_dir}/{name}/SKILL.md"
-            entries.append(f"- {name}: {description}\n  Path: {rel_path}")
-        if not entries:
+        if not skills:
             return spec, prompt
-        listing = "\n".join(entries)
-        preamble = (
-            "The following project skills are available to guide your work. "
-            "If a skill is relevant to your task, read it at the provided path "
-            "and follow its guidance.\n\n"
-            f"Available skills:\n{listing}"
+        skill_cmd = _skill_setup(skills, source_for)
+        merged_setup = (
+            f"{spec.setup_command} && {skill_cmd}" if spec.setup_command else skill_cmd
         )
-        return spec, f"{preamble}\n\n{prompt}"
+        return replace(spec, setup_command=merged_setup), prompt
 
     def _dockerfile(self, version: str) -> str:
         return (
@@ -222,22 +220,26 @@ def _parse(stdout: str) -> AgentRun:
     return AgentRun(raw=stdout, steps=steps, tools=tools, skills=[])
 
 
-def _read_skill_description(path: str) -> str:
-    try:
-        with open(path, encoding="utf-8") as fh:
-            content = fh.read()
-    except OSError:
-        return ""
-    if not content.startswith("---"):
-        return ""
-    end = content.find("---", 3)
-    if end == -1:
-        return ""
-    frontmatter = content[3:end]
-    for line in frontmatter.splitlines():
-        if line.startswith("description:"):
-            return line[len("description:") :].strip()
-    return ""
+def _skill_setup(skills: list[str], source_for: dict[str, str]) -> str:
+    """Build the shell prelude that installs skills into Pi's native path.
+
+    Reads ``/workspace/<source_for[name]>/<name>/SKILL.md`` (mounted workdir)
+    and copies into ``~/.pi/agent/skills/<name>/SKILL.md`` so Pi auto-discovers
+    them at startup.
+    """
+    cmds = []
+    for name in skills:
+        # shlex.quote protects the shell word but not the path: a name like
+        # "../evil" would still be interpreted as a path traversal once the
+        # shell strips the quotes. Reject any name containing a path separator.
+        if "/" in name or "\\" in name or name in (".", ".."):
+            raise ValueError(f"Invalid skill name: {name!r}")
+        quoted = shlex.quote(name)
+        src_base = f"{_CONTAINER_WORKDIR}/{source_for[name]}"
+        src = f"{shlex.quote(src_base)}/{quoted}/SKILL.md"
+        dst_dir = f"{_PI_NATIVE_SKILLS_DIR}/{quoted}"
+        cmds.append(f"mkdir -p {dst_dir} && cp {src} {dst_dir}/SKILL.md")
+    return " && ".join(cmds)
 
 
 def _esc(text: str) -> str:

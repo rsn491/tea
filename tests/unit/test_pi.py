@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import date
 
 import pytest
@@ -12,7 +13,6 @@ from tea.agent.pi import (
     Pi,
     PiHarness,
     _build_models_json,
-    _read_skill_description,
 )
 from tea.executor import DockerSpec, RawResult
 
@@ -190,31 +190,6 @@ def test_pi_parse_attaches_exit_code_stderr_and_duration():
     assert run.steps[0].content == "ok"
 
 
-# ── _read_skill_description ───────────────────────────────────────────────────
-
-
-def test_read_skill_description_parses_frontmatter(tmp_path):
-    skill = tmp_path / "SKILL.md"
-    skill.write_text("---\ndescription: Add a new math operation\n---\n# body\n")
-    assert _read_skill_description(str(skill)) == "Add a new math operation"
-
-
-def test_read_skill_description_missing_file():
-    assert _read_skill_description("/nonexistent/SKILL.md") == ""
-
-
-def test_read_skill_description_no_frontmatter(tmp_path):
-    skill = tmp_path / "SKILL.md"
-    skill.write_text("# No frontmatter here\n")
-    assert _read_skill_description(str(skill)) == ""
-
-
-def test_read_skill_description_no_description_key(tmp_path):
-    skill = tmp_path / "SKILL.md"
-    skill.write_text("---\ntitle: Something\n---\n")
-    assert _read_skill_description(str(skill)) == ""
-
-
 # ── Pi.install_skills ─────────────────────────────────────────────────────────
 
 
@@ -222,25 +197,31 @@ def _empty_spec() -> DockerSpec:
     return DockerSpec(command="noop", image="x")
 
 
-def test_install_skills_prepends_listing(tmp_path):
-    skill_dir = tmp_path / "skills" / "add-operation"
-    skill_dir.mkdir(parents=True)
-    (skill_dir / "SKILL.md").write_text(
-        "---\ndescription: How to add an operation\n---\n# body\n"
+def test_install_skills_copies_into_pi_native_path():
+    """Pi auto-discovers skills from ~/.pi/agent/skills/<name>/SKILL.md."""
+    spec, prompt = Pi(_ANTHROPIC_CFG).install_skills(
+        _empty_spec(), "Do the task", "/tmp/anywhere", ["add-operation"], {"add-operation": "skills"}
     )
-    spec = _empty_spec()
-    out_spec, prompt = Pi(_ANTHROPIC_CFG).install_skills(
-        spec,
-        "Do the task",
-        str(tmp_path),
-        ["add-operation"],
-        {"add-operation": "skills"},
+    assert prompt == "Do the task"  # Pi doesn't touch the prompt
+    assert spec.setup_command is not None
+    assert "mkdir -p /home/node/.pi/agent/skills/add-operation" in spec.setup_command
+    assert (
+        "cp /workspace/skills/add-operation/SKILL.md"
+        " /home/node/.pi/agent/skills/add-operation/SKILL.md"
+    ) in spec.setup_command
+
+
+def test_install_skills_reflects_per_skill_source():
+    """Pi copies each skill from its own discovered source directory."""
+    spec, _ = Pi(_ANTHROPIC_CFG).install_skills(
+        _empty_spec(),
+        "Task",
+        "/tmp/x",
+        ["alpha", "beta"],
+        {"alpha": ".pi/skills", "beta": ".agents/skills"},
     )
-    assert out_spec is spec  # Pi delivers via prompt, not spec
-    assert "Available skills:" in prompt
-    assert "add-operation: How to add an operation" in prompt
-    assert "skills/add-operation/SKILL.md" in prompt
-    assert prompt.endswith("Do the task")
+    assert ".pi/skills" in spec.setup_command
+    assert ".agents/skills" in spec.setup_command
 
 
 def test_install_skills_no_skills_returns_prompt_unchanged():
@@ -252,37 +233,57 @@ def test_install_skills_no_skills_returns_prompt_unchanged():
     assert prompt == "Do the task"
 
 
-def test_install_skills_multiple_skills(tmp_path):
-    for name, desc in [("skill-a", "First skill"), ("skill-b", "Second skill")]:
-        d = tmp_path / "skills" / name
-        d.mkdir(parents=True)
-        (d / "SKILL.md").write_text(f"---\ndescription: {desc}\n---\n")
-    _, prompt = Pi(_ANTHROPIC_CFG).install_skills(
+def test_install_skills_multiple_skills():
+    spec, _ = Pi(_ANTHROPIC_CFG).install_skills(
         _empty_spec(),
         "Task",
-        str(tmp_path),
+        "/tmp/x",
         ["skill-a", "skill-b"],
         {"skill-a": "skills", "skill-b": "skills"},
     )
-    assert "skill-a: First skill" in prompt
-    assert "skill-b: Second skill" in prompt
+    assert "/home/node/.pi/agent/skills/skill-a" in spec.setup_command
+    assert "/home/node/.pi/agent/skills/skill-b" in spec.setup_command
 
 
-def test_install_skills_advertises_per_skill_source(tmp_path):
-    """The in-container path reflects the source each skill was discovered in."""
-    claude = tmp_path / ".claude" / "skills" / "alpha"
-    claude.mkdir(parents=True)
-    (claude / "SKILL.md").write_text("---\ndescription: alpha skill\n---\n")
-    shared = tmp_path / ".agents" / "skills" / "beta"
-    shared.mkdir(parents=True)
-    (shared / "SKILL.md").write_text("---\ndescription: beta skill\n---\n")
+def test_install_skills_preserves_existing_setup():
+    """If build_spec set models.json setup, install_skills chains, not replaces."""
+    base = replace(_empty_spec(), setup_command="echo prelude")
+    spec, _ = Pi(_ANTHROPIC_CFG).install_skills(base, "Task", "/tmp/x", ["s"], {"s": "skills"})
+    assert spec.setup_command.startswith("echo prelude && ")
+    assert "/home/node/.pi/agent/skills/s" in spec.setup_command
 
-    _, prompt = Pi(_ANTHROPIC_CFG).install_skills(
+
+def test_install_skills_chains_with_models_json_setup():
+    """End-to-end: build_spec sets models.json, install_skills appends skill copies."""
+    cfg = ModelConfig("ollama/qwen", base_url="http://host.docker.internal:11434/v1")
+    base = Pi(cfg).build_spec("Task", timeout=60)
+    assert "models.json" in base.setup_command  # precondition
+
+    spec, _ = Pi(cfg).install_skills(base, "Task", "/tmp/x", ["s"], {"s": "skills"})
+    assert "models.json" in spec.setup_command
+    assert "/home/node/.pi/agent/skills/s" in spec.setup_command
+    assert spec.setup_command.index("models.json") < spec.setup_command.index(
+        "/home/node/.pi/agent/skills/s"
+    )
+
+
+@pytest.mark.parametrize("bad_name", ["../evil", "a/b", "..", ".", "a\\b"])
+def test_install_skills_rejects_path_traversal(bad_name):
+    with pytest.raises(ValueError, match="Invalid skill name"):
+        Pi(_ANTHROPIC_CFG).install_skills(
+            _empty_spec(), "Task", "/tmp/x", [bad_name], {bad_name: "skills"}
+        )
+
+
+def test_install_skills_skill_name_injection_is_quoted():
+    """shlex.quote prevents shell metacharacters in skill names from running."""
+    spec, _ = Pi(_ANTHROPIC_CFG).install_skills(
         _empty_spec(),
         "Task",
-        str(tmp_path),
-        ["alpha", "beta"],
-        {"alpha": ".pi/skills", "beta": ".agents/skills"},
+        "/tmp/x",
+        ["skill; echo hacked"],
+        {"skill; echo hacked": "skills"},
     )
-    assert ".pi/skills/alpha/SKILL.md" in prompt
-    assert ".agents/skills/beta/SKILL.md" in prompt
+    assert "'skill; echo hacked'" in spec.setup_command
+    sanitised = spec.setup_command.replace("'skill; echo hacked'", "SAFE")
+    assert "echo hacked" not in sanitised

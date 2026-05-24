@@ -111,6 +111,11 @@ def _skill_setup(skills: list[str], source_for: dict[str, str]) -> str:
     """
     cmds = []
     for name in skills:
+        # shlex.quote protects the shell word but not the path: a name like
+        # "../evil" would still be interpreted as a path traversal once the
+        # shell strips the quotes. Reject any name containing a path separator.
+        if "/" in name or "\\" in name or name in (".", ".."):
+            raise ValueError(f"Invalid skill name: {name!r}")
         src_base = f"{_CONTAINER_WORKDIR}/{source_for[name]}"
         quoted = shlex.quote(name)
         src = f"{shlex.quote(src_base)}/{quoted}/SKILL.md"
