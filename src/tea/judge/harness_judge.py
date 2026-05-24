@@ -27,13 +27,10 @@ def _default_harness():
     if os.path.isdir(host_claude_dir):
         extra_volumes[host_claude_dir] = "/home/node/.claude"
 
-    class _JudgeAgent(ClaudeCode):
-        def build_spec(self, prompt: str, timeout: int):
-            spec = super().build_spec(prompt, timeout)
-            spec.extra_volumes.update(extra_volumes)
-            return spec
-
-    return Harness(_JudgeAgent(model=_DEFAULT_MODEL, max_turns=1), DockerExecutor())
+    return Harness(
+        ClaudeCode(model=_DEFAULT_MODEL, max_turns=1, extra_volumes=extra_volumes),
+        DockerExecutor(),
+    )
 
 
 class HarnessJudge(Judge):

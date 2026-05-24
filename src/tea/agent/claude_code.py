@@ -21,9 +21,21 @@ class ClaudeCode(Agent):
         self,
         model: str = _DEFAULT_MODEL,
         max_turns: int = _DEFAULT_MAX_TURNS,
+        extra_volumes: dict[str, str] | None = None,
     ) -> None:
         self._model = model
         self._max_turns = max_turns
+        self._extra_volumes: dict[str, str] = (
+            dict(extra_volumes) if extra_volumes else {}
+        )
+
+    @property
+    def model(self) -> str:
+        return self._model
+
+    @property
+    def max_turns(self) -> int:
+        return self._max_turns
 
     def build_spec(
         self, prompt: str, timeout: int, skills: list[str] = ()
@@ -39,6 +51,7 @@ class ClaudeCode(Agent):
         host_claude_dir = os.path.expanduser("~/.claude")
         if os.path.isdir(host_claude_dir):
             extra_volumes[host_claude_dir] = "/home/node/.claude"
+        extra_volumes.update(self._extra_volumes)
 
         return DockerSpec(
             command=(
@@ -133,9 +146,9 @@ class ClaudeCode(Agent):
 class ClaudeCodeHarness(ApiKeyHarness):
     def with_api_key(self) -> Harness:
         agent = self._agent
-        model = agent._model if isinstance(agent, ClaudeCode) else _DEFAULT_MODEL
+        model = agent.model if isinstance(agent, ClaudeCode) else _DEFAULT_MODEL
         max_turns = (
-            agent._max_turns if isinstance(agent, ClaudeCode) else _DEFAULT_MAX_TURNS
+            agent.max_turns if isinstance(agent, ClaudeCode) else _DEFAULT_MAX_TURNS
         )
         return Harness(ClaudeCode(model=model, max_turns=max_turns), DockerExecutor())
 

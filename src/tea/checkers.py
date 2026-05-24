@@ -44,7 +44,8 @@ def check_judge_task(
     if judge is None:
         judge = default_judge()
 
-    assert isinstance(judge, Judge)
+    if not isinstance(judge, Judge):
+        raise TypeError(f"judge must be a Judge instance, got {type(judge)!r}")
     result = judge.evaluate(diff, prompt)
     label = f"judge score {result.score:.2f} >= {min_score} | {result.rationale}"
     check(label, result.score >= min_score)
