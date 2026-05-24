@@ -14,7 +14,7 @@ from tea.agent.pi import (
     _build_models_json,
     _read_skill_description,
 )
-from tea.executor import RawResult
+from tea.executor import DockerSpec, RawResult
 
 _ANTHROPIC_CFG = ModelConfig(
     "anthropic/claude-sonnet-4-6", api_key_env="ANTHROPIC_API_KEY"
@@ -215,36 +215,61 @@ def test_read_skill_description_no_description_key(tmp_path):
     assert _read_skill_description(str(skill)) == ""
 
 
-# ── Pi.prepare_skills ─────────────────────────────────────────────────────────
+# ── Pi.install_skills ─────────────────────────────────────────────────────────
 
 
-def test_prepare_skills_prepends_listing(tmp_path):
-    skills_dir = tmp_path / ".claude" / "skills" / "add-operation"
-    skills_dir.mkdir(parents=True)
-    (skills_dir / "SKILL.md").write_text(
+def _empty_spec() -> DockerSpec:
+    return DockerSpec(command="noop", image="x")
+
+
+def test_install_skills_prepends_listing(tmp_path):
+    skill_dir = tmp_path / "skills" / "add-operation"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
         "---\ndescription: How to add an operation\n---\n# body\n"
     )
-    result = Pi(_ANTHROPIC_CFG).prepare_skills(
-        "Do the task", str(tmp_path), ["add-operation"]
+    spec = _empty_spec()
+    out_spec, prompt = Pi(_ANTHROPIC_CFG).install_skills(
+        spec, "Do the task", str(tmp_path), "skills", ["add-operation"]
     )
-    assert "Available skills:" in result
-    assert "add-operation: How to add an operation" in result
-    assert ".claude/skills/add-operation/SKILL.md" in result
-    assert result.endswith("Do the task")
+    assert out_spec is spec  # Pi delivers via prompt, not spec
+    assert "Available skills:" in prompt
+    assert "add-operation: How to add an operation" in prompt
+    assert "skills/add-operation/SKILL.md" in prompt
+    assert prompt.endswith("Do the task")
 
 
-def test_prepare_skills_no_skills_returns_prompt_unchanged():
-    result = Pi(_ANTHROPIC_CFG).prepare_skills("Do the task", "/some/dir", [])
-    assert result == "Do the task"
+def test_install_skills_no_skills_returns_prompt_unchanged():
+    spec = _empty_spec()
+    out_spec, prompt = Pi(_ANTHROPIC_CFG).install_skills(
+        spec, "Do the task", "/some/dir", "skills", []
+    )
+    assert out_spec is spec
+    assert prompt == "Do the task"
 
 
-def test_prepare_skills_multiple_skills(tmp_path):
+def test_install_skills_multiple_skills(tmp_path):
     for name, desc in [("skill-a", "First skill"), ("skill-b", "Second skill")]:
-        d = tmp_path / ".claude" / "skills" / name
+        d = tmp_path / "skills" / name
         d.mkdir(parents=True)
         (d / "SKILL.md").write_text(f"---\ndescription: {desc}\n---\n")
-    result = Pi(_ANTHROPIC_CFG).prepare_skills(
-        "Task", str(tmp_path), ["skill-a", "skill-b"]
+    _, prompt = Pi(_ANTHROPIC_CFG).install_skills(
+        _empty_spec(), "Task", str(tmp_path), "skills", ["skill-a", "skill-b"]
     )
-    assert "skill-a: First skill" in result
-    assert "skill-b: Second skill" in result
+    assert "skill-a: First skill" in prompt
+    assert "skill-b: Second skill" in prompt
+
+
+def test_install_skills_advertises_user_chosen_path(tmp_path):
+    """The in-container path in the preamble matches the user's skills_dir."""
+    d = tmp_path / "eval-fixtures" / "skills" / "alpha"
+    d.mkdir(parents=True)
+    (d / "SKILL.md").write_text("---\ndescription: alpha skill\n---\n")
+    _, prompt = Pi(_ANTHROPIC_CFG).install_skills(
+        _empty_spec(),
+        "Task",
+        str(tmp_path),
+        "eval-fixtures/skills",
+        ["alpha"],
+    )
+    assert "eval-fixtures/skills/alpha/SKILL.md" in prompt

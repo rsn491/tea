@@ -69,15 +69,30 @@ class Pi(Agent):
             extra_hosts=extra_hosts,
         )
 
-    def prepare_skills(self, prompt: str, workdir: str, skills: list[str]) -> str:
+    def install_skills(
+        self,
+        spec: DockerSpec,
+        prompt: str,
+        workdir: str,
+        skills_dir: str,
+        skills: list[str],
+    ) -> tuple[DockerSpec, str]:
+        """Prepend a skill listing to the prompt — Pi has no native skill loader.
+
+        Reads each ``SKILL.md``'s frontmatter ``description`` from the host
+        workdir so the agent sees titles, descriptions, and the in-container
+        relative paths it can read on demand. Paths advertised in the preamble
+        are relative to the container cwd (``/workspace``) and match the
+        user-configured ``skills_dir``.
+        """
         entries = []
         for name in skills:
-            skill_path = os.path.join(workdir, ".claude", "skills", name, "SKILL.md")
+            skill_path = os.path.join(workdir, skills_dir, name, "SKILL.md")
             description = _read_skill_description(skill_path)
-            rel_path = f".claude/skills/{name}/SKILL.md"
+            rel_path = f"{skills_dir}/{name}/SKILL.md"
             entries.append(f"- {name}: {description}\n  Path: {rel_path}")
         if not entries:
-            return prompt
+            return spec, prompt
         listing = "\n".join(entries)
         preamble = (
             "The following project skills are available to guide your work. "
@@ -85,7 +100,7 @@ class Pi(Agent):
             "and follow its guidance.\n\n"
             f"Available skills:\n{listing}"
         )
-        return f"{preamble}\n\n{prompt}"
+        return spec, f"{preamble}\n\n{prompt}"
 
     def _dockerfile(self, version: str) -> str:
         return (
@@ -115,8 +130,15 @@ class PiHarness:
     ``Agents.Pi.with_model(config).prompt(...)``.
     """
 
+    def __init__(self, *, skills_dir: str | None = None) -> None:
+        self._skills_dir = skills_dir
+
     def with_model(self, config: ModelConfig) -> Harness:
-        return Harness(Pi(model_config=config), DockerExecutor())
+        return Harness(
+            Pi(model_config=config),
+            DockerExecutor(),
+            skills_dir=self._skills_dir,
+        )
 
 
 def _build_models_json(model: str, base_url: str, api_key: str | None) -> str:

@@ -13,11 +13,17 @@ from .agent_run import AgentRun, FileChange, FileDiff
 
 
 class _Runnable(Protocol):
-    def _execute(
-        self, text: str, *, timeout: int, workdir: str | None, skills: list[str]
-    ) -> AgentRun: ...
+    skills_dir: str | None
 
-    def prepare_skills(self, prompt: str, workdir: str, skills: list[str]) -> str: ...
+    def _execute(
+        self,
+        text: str,
+        *,
+        timeout: int,
+        workdir: str | None,
+        skills: list[str],
+        skills_dir: str | None,
+    ) -> AgentRun: ...
 
 
 class RunBuilder:
@@ -30,9 +36,19 @@ class RunBuilder:
         self._text = text
         self._timeout = timeout
         self._workdir: str | None = None
+        self._skills_dir: str | None = getattr(runner, "skills_dir", None)
 
     def workdir(self, path: str) -> RunBuilder:
         self._workdir = os.path.abspath(path)
+        return self
+
+    def skills_from(self, path: str) -> RunBuilder:
+        """Override the suite-level ``skills_dir`` for this single run.
+
+        ``path`` is interpreted relative to the run's ``workdir`` (the same
+        convention as the harness-level ``skills_dir``).
+        """
+        self._skills_dir = path
         return self
 
     def run(self) -> AgentRun:
@@ -41,14 +57,15 @@ class RunBuilder:
             tmp_dir = tempfile.mkdtemp()
             shutil.copytree(self._workdir, tmp_dir, dirs_exist_ok=True)
         effective_workdir = tmp_dir if tmp_dir else self._workdir
-        skills = _discover_skills(self._workdir)
-        text = self._text
-        if skills and effective_workdir:
-            text = self._runner.prepare_skills(text, effective_workdir, skills)
+        skills = _discover_skills(self._skills_dir, effective_workdir)
         try:
             before = _snapshot(self._workdir)
             result = self._runner._execute(
-                text, timeout=self._timeout, workdir=effective_workdir, skills=skills
+                self._text,
+                timeout=self._timeout,
+                workdir=effective_workdir,
+                skills=skills,
+                skills_dir=self._skills_dir,
             )
             after = _snapshot(effective_workdir)
             result._files_changed_fn = lambda: _diff_snapshots(before, after)
@@ -67,15 +84,26 @@ class RunBuilder:
 # helpers
 
 
-def _discover_skills(workdir: str | None) -> list[str]:
-    if not workdir:
+def _discover_skills(skills_dir: str | None, workdir: str | None) -> list[str]:
+    """Scan ``<workdir>/<skills_dir>/*/SKILL.md`` and return the skill names.
+
+    ``skills_dir`` is the user-supplied source path; tea imposes no default. If
+    either argument is missing, no skills are loaded. Absolute ``skills_dir``
+    paths are rejected — skills must live inside the workdir so they ride the
+    workdir bind mount into the container.
+    """
+    if not skills_dir or not workdir:
         return []
-    skills_dir = os.path.join(workdir, ".claude", "skills")
-    if not os.path.isdir(skills_dir):
+    if os.path.isabs(skills_dir):
+        raise ValueError(
+            f"skills_dir must be relative to workdir; got absolute path {skills_dir!r}"
+        )
+    full = os.path.join(workdir, skills_dir)
+    if not os.path.isdir(full):
         return []
     return [
         entry.name
-        for entry in os.scandir(skills_dir)
+        for entry in os.scandir(full)
         if entry.is_dir() and os.path.isfile(os.path.join(entry.path, "SKILL.md"))
     ]
 
