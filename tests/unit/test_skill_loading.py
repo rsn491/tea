@@ -571,7 +571,11 @@ def test_pi_install_skills_copies_into_native_path():
     cfg = ModelConfig("anthropic/claude-sonnet-4-6", api_key_env="ANTHROPIC_API_KEY")
     base_spec = DockerSpec(command="noop", image="x")
     spec, prompt = Pi(cfg).install_skills(
-        base_spec, "Do the task", "/tmp/anywhere", ["add-operation"], {"add-operation": "skills"}
+        base_spec,
+        "Do the task",
+        "/tmp/anywhere",
+        ["add-operation"],
+        {"add-operation": "skills"},
     )
     assert prompt == "Do the task"  # Pi doesn't touch the prompt
     assert spec.setup_command is not None

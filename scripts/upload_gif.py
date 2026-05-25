@@ -23,13 +23,18 @@ def _die(msg: str) -> None:
 def upload(gif: Path) -> str:
     boundary = "----FormBoundary"
     body = (
-        f"--{boundary}\r\n"
-        f'Content-Disposition: form-data; name="reqtype"\r\n\r\n'
-        f"fileupload\r\n"
-        f"--{boundary}\r\n"
-        f'Content-Disposition: form-data; name="fileToUpload"; filename="{gif.name}"\r\n'
-        f"Content-Type: image/gif\r\n\r\n"
-    ).encode() + gif.read_bytes() + f"\r\n--{boundary}--\r\n".encode()
+        (
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="reqtype"\r\n\r\n'
+            f"fileupload\r\n"
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="fileToUpload";'
+            f' filename="{gif.name}"\r\n'
+            f"Content-Type: image/gif\r\n\r\n"
+        ).encode()
+        + gif.read_bytes()
+        + f"\r\n--{boundary}--\r\n".encode()
+    )
 
     req = urllib.request.Request(
         "https://catbox.moe/user/api.php",

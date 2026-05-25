@@ -54,8 +54,8 @@ def _check_deps() -> None:
 
 def record(name: str) -> Path:
     script = _TMP / f"tea-demo-{name}.sh"
-    cast   = _TMP / f"tea-demo-{name}.cast"
-    gif    = _TMP / f"tea-demo-{name}.gif"
+    cast = _TMP / f"tea-demo-{name}.cast"
+    gif = _TMP / f"tea-demo-{name}.gif"
 
     if not script.exists():
         _die(
@@ -65,20 +65,36 @@ def record(name: str) -> Path:
 
     print(f"recording {name} …", file=sys.stderr)
     subprocess.run(
-        ["asciinema", "rec", "--overwrite",
-         "--cols", str(_COLS), "--rows", str(_ROWS),
-         "-c", f"bash {script}", str(cast)],
+        [
+            "asciinema",
+            "rec",
+            "--overwrite",
+            "--cols",
+            str(_COLS),
+            "--rows",
+            str(_ROWS),
+            "-c",
+            f"bash {script}",
+            str(cast),
+        ],
         check=True,
     )
 
     print("converting to GIF …", file=sys.stderr)
     subprocess.run(
-        ["agg",
-         "--font-size", str(_FONT_SIZE),
-         "--cols", str(_COLS),
-         "--idle-time-limit", str(_IDLE_TIME_LIMIT),
-         "--last-frame-duration", str(_LAST_FRAME_DURATION),
-         str(cast), str(gif)],
+        [
+            "agg",
+            "--font-size",
+            str(_FONT_SIZE),
+            "--cols",
+            str(_COLS),
+            "--idle-time-limit",
+            str(_IDLE_TIME_LIMIT),
+            "--last-frame-duration",
+            str(_LAST_FRAME_DURATION),
+            str(cast),
+            str(gif),
+        ],
         check=True,
     )
 

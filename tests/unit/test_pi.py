@@ -200,7 +200,11 @@ def _empty_spec() -> DockerSpec:
 def test_install_skills_copies_into_pi_native_path():
     """Pi auto-discovers skills from ~/.pi/agent/skills/<name>/SKILL.md."""
     spec, prompt = Pi(_ANTHROPIC_CFG).install_skills(
-        _empty_spec(), "Do the task", "/tmp/anywhere", ["add-operation"], {"add-operation": "skills"}
+        _empty_spec(),
+        "Do the task",
+        "/tmp/anywhere",
+        ["add-operation"],
+        {"add-operation": "skills"},
     )
     assert prompt == "Do the task"  # Pi doesn't touch the prompt
     assert spec.setup_command is not None
@@ -248,7 +252,9 @@ def test_install_skills_multiple_skills():
 def test_install_skills_preserves_existing_setup():
     """If build_spec set models.json setup, install_skills chains, not replaces."""
     base = replace(_empty_spec(), setup_command="echo prelude")
-    spec, _ = Pi(_ANTHROPIC_CFG).install_skills(base, "Task", "/tmp/x", ["s"], {"s": "skills"})
+    spec, _ = Pi(_ANTHROPIC_CFG).install_skills(
+        base, "Task", "/tmp/x", ["s"], {"s": "skills"}
+    )
     assert spec.setup_command.startswith("echo prelude && ")
     assert "/home/node/.pi/agent/skills/s" in spec.setup_command
 

@@ -58,9 +58,11 @@ _SKIP_OLLAMA = pytest.mark.skipif(
 @pytest.mark.integration
 @_SKIP_ANTHROPIC
 def test_pi_hello_world():
-    run = Agents.Pi.with_model(_ANTHROPIC_MODEL).prompt(
-        "Say hello world and nothing else."
-    ).run()
+    run = (
+        Agents.Pi.with_model(_ANTHROPIC_MODEL)
+        .prompt("Say hello world and nothing else.")
+        .run()
+    )
 
     assert isinstance(run, AgentRun)
     assert len(run.raw) > 0, "raw output should not be empty"
@@ -80,7 +82,8 @@ def test_pi_skill_is_loaded(tmp_path):
     skill_dir = tmp_path / ".pi" / "skills" / "greet"
     skill_dir.mkdir(parents=True)
     (skill_dir / "SKILL.md").write_text(
-        "# greet\nWhenever the user asks you to greet them, respond with exactly: SKILL_LOADED\n"
+        "# greet\nWhenever the user asks you to greet them, "
+        "respond with exactly: SKILL_LOADED\n"
     )
 
     run = (
@@ -104,9 +107,11 @@ def test_pi_skill_is_loaded(tmp_path):
 @_SKIP_OLLAMA
 def test_pi_hello_world_ollama():
     """Pi runs a prompt end-to-end through Docker against a local Ollama model."""
-    run = Agents.Pi.with_model(_OLLAMA_MODEL).prompt(
-        "Say hello world and nothing else."
-    ).run()
+    run = (
+        Agents.Pi.with_model(_OLLAMA_MODEL)
+        .prompt("Say hello world and nothing else.")
+        .run()
+    )
 
     assert isinstance(run, AgentRun)
     assert isinstance(run.raw, str)
