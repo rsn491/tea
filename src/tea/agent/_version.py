@@ -54,5 +54,18 @@ def resolve_cli_version(version_cmd: str, package: str, env_var: str) -> str:
     except FileNotFoundError:
         pass
 
+    # 3b. npm view fallback — queries the registry for the latest published version
+    try:
+        out = subprocess.run(
+            ["npm", "view", package, "version"],
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        m = re.search(r"(\d+\.\d+\.\d+)", out)
+        if m:
+            return m.group(1)
+    except FileNotFoundError:
+        pass
+
     # 4. Last resort — date-stamped tag so a fresh build is triggered each day
     return f"latest-{date.today().strftime('%Y%m%d')}"

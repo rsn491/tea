@@ -15,7 +15,7 @@ from .harness import Harness
 from .model_config import ModelConfig
 
 _NODE_VERSION = "22"
-_PI_PACKAGE = "pi"
+_PI_PACKAGE = "@earendil-works/pi-coding-agent"
 _PI_VERSION_ENV = "PI_VERSION"
 
 # DockerExecutor mounts the workdir at this path; install_skills relies on it.
@@ -67,7 +67,7 @@ class Pi(Agent):
 
         return DockerSpec(
             command=(
-                f"{npm_prefix}/bin/pi --mode json --no-extensions"
+                f"{npm_prefix}/bin/pi --mode json --no-extensions --print"
                 f" --model {self._model_config.model}"
                 f' "{_esc(prompt)}"'
             ),

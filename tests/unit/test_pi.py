@@ -66,7 +66,7 @@ def test_build_spec_defaults_no_base_url(monkeypatch):
     assert spec.extra_hosts == {}
     assert spec.setup_command is None
     assert "FROM node:22" in spec.dockerfile
-    assert "pi@1.0.0" in spec.dockerfile
+    assert "@earendil-works/pi-coding-agent@1.0.0" in spec.dockerfile
     assert "--model anthropic/claude-sonnet-4-6" in spec.command
     resolve_cli_version.cache_clear()
 
