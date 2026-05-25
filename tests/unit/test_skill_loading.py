@@ -16,7 +16,7 @@ from tea.agent.model_config import ModelConfig
 from tea.agent.pi import Pi
 from tea.agent.run_builder import RunBuilder, _discover_skills, _resolve_skill_sources
 from tea.executor import DockerSpec, ExecutionSpec, Executor, RawResult
-from tea.executor.docker import DockerExecutor
+from tea.executor.docker_executor import DockerExecutor
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 

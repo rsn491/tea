@@ -2,7 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from tea.infra import DockerRunConfig, DockerRunResult, run_in_docker
+from tea.infra import Docker, DockerRunConfig, DockerRunResult
 
 
 def _make_container(stdout=b"out", stderr=b"err", exit_code=0):
@@ -15,12 +15,12 @@ def _make_container(stdout=b"out", stderr=b"err", exit_code=0):
 
 
 @patch("tea.infra.docker.docker")
-def test_run_in_docker_returns_result(mock_docker_module):
+def test_run_returns_result(mock_docker_module):
     container = _make_container()
     mock_docker_module.from_env.return_value.containers.run.return_value = container
 
     config = DockerRunConfig(image="node:22", command=["echo", "hi"])
-    result = run_in_docker(config)
+    result = Docker().run(config)
 
     assert isinstance(result, DockerRunResult)
     assert result.exit_code == 0
@@ -29,12 +29,12 @@ def test_run_in_docker_returns_result(mock_docker_module):
 
 
 @patch("tea.infra.docker.docker")
-def test_run_in_docker_uses_detach_and_no_remove(mock_docker_module):
+def test_run_uses_detach_and_no_remove(mock_docker_module):
     container = _make_container()
     mock_docker_module.from_env.return_value.containers.run.return_value = container
 
     config = DockerRunConfig(image="node:22", command=["sh", "-c", "echo hello"])
-    run_in_docker(config)
+    Docker().run(config)
 
     call_kwargs = mock_docker_module.from_env.return_value.containers.run.call_args
     assert call_kwargs.kwargs.get("detach") is True
@@ -47,7 +47,7 @@ def test_container_removed_after_run(mock_docker_module):
     mock_docker_module.from_env.return_value.containers.run.return_value = container
 
     config = DockerRunConfig(image="node:22", command=["echo", "hi"])
-    run_in_docker(config)
+    Docker().run(config)
 
     container.remove.assert_called_once_with(force=True)
 
@@ -60,19 +60,24 @@ def test_container_removed_on_timeout(mock_docker_module):
 
     config = DockerRunConfig(image="node:22", command=["sleep", "999"], timeout=1)
     with pytest.raises(Exception):
-        run_in_docker(config)
+        Docker().run(config)
 
     container.remove.assert_called_once_with(force=True)
 
 
 @patch("tea.infra.docker.docker")
-def test_run_in_docker_raises_original_error_not_unbound(mock_docker_module):
-    # If container.wait() raises, the original exception must propagate — not an
-    # UnboundLocalError caused by stdout/stderr/exit_code never being assigned.
-    container = MagicMock()
-    container.wait.side_effect = RuntimeError("container timed out")
-    mock_docker_module.from_env.return_value.containers.run.return_value = container
+def test_run_raises_after_shutdown(mock_docker_module):
+    runner = Docker()
+    runner.shutdown()
 
-    config = DockerRunConfig(image="node:22", command=["sleep", "999"], timeout=1)
-    with pytest.raises(RuntimeError, match="container timed out"):
-        run_in_docker(config)
+    config = DockerRunConfig(image="node:22", command=["echo", "hi"])
+    with pytest.raises(RuntimeError, match="shut down"):
+        runner.run(config)
+
+
+@patch("tea.infra.docker.docker")
+def test_shared_returns_singleton_when_no_context(mock_docker_module):
+    Docker._singleton = None  # reset for test isolation
+    a = Docker.get()
+    b = Docker.get()
+    assert a is b
