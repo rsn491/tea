@@ -8,8 +8,8 @@ _CONTAINER_WORKDIR = "/workspace"
 
 
 class DockerExecutor(Executor):
-    def __init__(self, docker: Docker = Docker.get()) -> None:
-        self._docker = docker
+    def __init__(self, docker: Docker | None = None) -> None:
+        self._docker = docker if docker is not None else Docker.get()
 
     def run(self, spec: DockerSpec, workdir: str | None) -> RawResult:
         if spec.dockerfile:
