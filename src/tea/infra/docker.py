@@ -29,16 +29,6 @@ class DockerRunResult:
     duration_s: float = 0.0
 
 
-def ensure_image(tag: str, dockerfile: str) -> None:
-    client = docker.from_env()
-    try:
-        client.images.get(tag)
-        return
-    except docker.errors.ImageNotFound:
-        pass
-    client.images.build(fileobj=io.BytesIO(dockerfile.encode()), tag=tag, rm=True)
-
-
 class Docker:
     _singleton: ClassVar[Docker | None] = None
 
@@ -57,6 +47,15 @@ class Docker:
         return Docker._singleton
 
     # ── public ────────────────────────────────────────────────────────────────
+
+    def create_image(self, tag: str, dockerfile: str) -> None:
+        client = docker.from_env()
+        try:
+            client.images.get(tag)
+            return
+        except docker.errors.ImageNotFound:
+            pass
+        client.images.build(fileobj=io.BytesIO(dockerfile.encode()), tag=tag, rm=True)
 
     def run(self, config: DockerRunConfig) -> DockerRunResult:
         with self._lock:
