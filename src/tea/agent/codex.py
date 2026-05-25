@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import shlex
+from dataclasses import replace
 
 from tea.executor import DockerSpec, RawResult
 from tea.executor.docker import DockerExecutor
@@ -16,14 +17,17 @@ _CODEX_PACKAGE = "@openai/codex"
 _CODEX_VERSION_ENV = "CODEX_VERSION"
 _DEFAULT_MODEL = "gpt-5.3-codex"
 
+# DockerExecutor mounts the workdir at this path; install_skills relies on it.
+_CONTAINER_WORKDIR = "/workspace"
+
 
 class Codex(Agent):
+    DEFAULT_SKILL_SOURCES = (".codex/skills", ".agents/skills")
+
     def __init__(self, model: str = _DEFAULT_MODEL) -> None:
         self._model = model
 
-    def build_spec(
-        self, prompt: str, timeout: int, skills: list[str] = ()
-    ) -> DockerSpec:
+    def build_spec(self, prompt: str, timeout: int) -> DockerSpec:
         npm_prefix = "/home/node/.npm-global"
         env: dict[str, str] = {"HOME": "/home/node", "NPM_CONFIG_PREFIX": npm_prefix}
         if api_key := os.environ.get("OPENAI_API_KEY"):
@@ -40,13 +44,33 @@ class Codex(Agent):
                 f" -m {shlex.quote(self._model)}"
                 f' "{_esc(prompt)}"'
             ),
-            setup_command=_skill_setup(skills) if skills else None,
             dockerfile=self._dockerfile(version),
             env=env,
             image=image,
             user="node",
             timeout=timeout,
         )
+
+    def install_skills(
+        self,
+        spec: DockerSpec,
+        prompt: str,
+        workdir: str,
+        skills: list[str],
+        source_for: dict[str, str],
+    ) -> tuple[DockerSpec, str]:
+        """Copy project skills from the mounted workdir into Codex's native path.
+
+        Codex loads skills from ``~/.codex/skills/<name>/SKILL.md``. The workdir
+        is mounted at ``/workspace``, so each ``SKILL.md`` is read from the
+        source path it was discovered in (``/workspace/<source_for[name]>/``)
+        and copied into Codex's skill directory at container start.
+        """
+        skill_cmd = _skill_setup(skills, source_for)
+        merged_setup = (
+            f"{spec.setup_command} && {skill_cmd}" if spec.setup_command else skill_cmd
+        )
+        return replace(spec, setup_command=merged_setup), prompt
 
     def _dockerfile(self, version: str) -> str:
         return (
@@ -72,19 +96,24 @@ class Codex(Agent):
 class CodexHarness(ApiKeyHarness):
     def with_api_key(self) -> Harness:
         model = self._agent._model if isinstance(self._agent, Codex) else _DEFAULT_MODEL
-        return Harness(Codex(model=model), DockerExecutor())
+        return Harness(
+            Codex(model=model),
+            DockerExecutor(),
+            skills_sources=self.skills_sources,
+        )
 
 
-def _skill_setup(skills: list[str]) -> str:
-    """Shell commands to install skills into ~/.codex/skills/ inside the container.
+def _skill_setup(skills: list[str], source_for: dict[str, str]) -> str:
+    """Build the shell prelude that installs skills into ``~/.codex/skills/``.
 
-    Copies from /workspace/.claude/skills/<name>/SKILL.md (the mounted workdir)
-    into the Codex native skill location so Codex loads them automatically.
+    Reads ``/workspace/<source_for[name]>/<name>/SKILL.md`` (mounted workdir)
+    and copies into Codex's native location so the CLI picks them up.
     """
     cmds = []
     for name in skills:
+        src_base = f"{_CONTAINER_WORKDIR}/{source_for[name]}"
         quoted = shlex.quote(name)
-        src = f"/workspace/.claude/skills/{quoted}/SKILL.md"
+        src = f"{shlex.quote(src_base)}/{quoted}/SKILL.md"
         dst_dir = f"/home/node/.codex/skills/{quoted}"
         cmds.append(f"mkdir -p {dst_dir} && cp {src} {dst_dir}/SKILL.md")
     return " && ".join(cmds)

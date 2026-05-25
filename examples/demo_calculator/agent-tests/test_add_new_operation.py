@@ -1,6 +1,10 @@
 from tea import Agents, check_diff_added, check_skill_used
 from tea.runner import iterations
 
+# Skills live in examples/demo_calculator/.agents/skills/. That's one of the
+# conventional locations Claude (and Codex and Pi) discover by default, so no
+# explicit ``skills_sources`` configuration is needed here.
+
 
 @iterations(2)
 def test_add_minus_operation():

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import shlex
+from dataclasses import replace
 
 from tea.executor import DockerSpec, RawResult
 from tea.executor.docker import DockerExecutor
@@ -18,8 +19,15 @@ _CLAUDE_CODE_VERSION_ENV = "CLAUDE_CODE_VERSION"
 _DEFAULT_MAX_TURNS = 25
 _DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 
+# DockerExecutor mounts the workdir at this path; install_skills relies on it.
+_CONTAINER_WORKDIR = "/workspace"
+# Where Claude Code's CLI looks for project skills inside the container cwd.
+_CLAUDE_NATIVE_PROJECT_SKILLS = ".claude/skills"
+
 
 class ClaudeCode(Agent):
+    DEFAULT_SKILL_SOURCES = (".claude/skills", ".agents/skills")
+
     def __init__(
         self,
         model: str = _DEFAULT_MODEL,
@@ -40,9 +48,7 @@ class ClaudeCode(Agent):
     def max_turns(self) -> int:
         return self._max_turns
 
-    def build_spec(
-        self, prompt: str, timeout: int, skills: list[str] = ()
-    ) -> DockerSpec:
+    def build_spec(self, prompt: str, timeout: int) -> DockerSpec:
         npm_prefix = "/home/node/.npm-global"
         env: dict[str, str] = {"HOME": "/home/node", "NPM_CONFIG_PREFIX": npm_prefix}
         if key := os.environ.get("ANTHROPIC_API_KEY"):
@@ -51,9 +57,12 @@ class ClaudeCode(Agent):
             env["CLAUDE_CODE_OAUTH_TOKEN"] = token
 
         extra_volumes: dict[str, str] = {}
-        host_claude_dir = os.path.expanduser("~/.claude")
-        if os.path.isdir(host_claude_dir):
-            extra_volumes[host_claude_dir] = "/home/node/.claude"
+        # Mount only OAuth credentials from the host ~/.claude — not the whole
+        # directory, which would leak the developer's personal skills, agents,
+        # and settings into the test container.
+        host_creds = os.path.expanduser("~/.claude/.credentials.json")
+        if os.path.isfile(host_creds):
+            extra_volumes[host_creds] = "/home/node/.claude/.credentials.json"
         extra_volumes.update(self._extra_volumes)
 
         version = self.version()
@@ -73,6 +82,39 @@ class ClaudeCode(Agent):
             timeout=timeout,
             extra_volumes=extra_volumes,
         )
+
+    def install_skills(
+        self,
+        spec: DockerSpec,
+        prompt: str,
+        workdir: str,
+        skills: list[str],
+        source_for: dict[str, str],
+    ) -> tuple[DockerSpec, str]:
+        """Materialise skills into ``/workspace/.claude/skills/`` for Claude Code.
+
+        Claude Code's CLI auto-discovers project skills from ``<cwd>/.claude/skills/``.
+        Tea's container cwd is ``/workspace`` (the bind-mounted workdir copy).
+        Skills discovered in that native path need no copy; skills from any
+        other source are translated into the path the CLI scans.
+        """
+        dst_base = f"{_CONTAINER_WORKDIR}/{_CLAUDE_NATIVE_PROJECT_SKILLS}"
+        cmds: list[str] = []
+        for name in skills:
+            src_dir = source_for[name]
+            if os.path.normpath(src_dir) == _CLAUDE_NATIVE_PROJECT_SKILLS:
+                continue
+            q = shlex.quote(name)
+            src = f"{shlex.quote(f'{_CONTAINER_WORKDIR}/{src_dir}')}/{q}/SKILL.md"
+            dst_dir = f"{shlex.quote(dst_base)}/{q}"
+            cmds.append(f"mkdir -p {dst_dir} && cp {src} {dst_dir}/SKILL.md")
+        if not cmds:
+            return spec, prompt
+        skill_cmd = f"mkdir -p {shlex.quote(dst_base)} && " + " && ".join(cmds)
+        merged = (
+            f"{spec.setup_command} && {skill_cmd}" if spec.setup_command else skill_cmd
+        )
+        return replace(spec, setup_command=merged), prompt
 
     def _dockerfile(self, version: str) -> str:
         return (
@@ -166,7 +208,11 @@ class ClaudeCodeHarness(ApiKeyHarness):
         max_turns = (
             agent.max_turns if isinstance(agent, ClaudeCode) else _DEFAULT_MAX_TURNS
         )
-        return Harness(ClaudeCode(model=model, max_turns=max_turns), DockerExecutor())
+        return Harness(
+            ClaudeCode(model=model, max_turns=max_turns),
+            DockerExecutor(),
+            skills_sources=self.skills_sources,
+        )
 
 
 def _esc(text: str) -> str:
