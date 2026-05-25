@@ -15,7 +15,7 @@ from tea.checkers import (
 from tea.executor import DockerSpec, ExecutionSpec, Executor, RawResult
 from tea.executor.docker_executor import DockerExecutor
 from tea.judge import HarnessJudge, Judge, JudgeResult, external_judge
-from tea.runner import TestRunner, iterations
+from tea.runner import TestCase, TestRunner, iterations
 
 __all__ = [
     "Agents",  # catalog — Agents.ClaudeCode / Agents.Pi
@@ -40,6 +40,7 @@ __all__ = [
     "FileDiff",
     "Step",
     "ToolCall",
+    "TestCase",
     "TestRunner",
     "iterations",
     "check",

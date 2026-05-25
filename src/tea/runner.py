@@ -17,6 +17,12 @@ from tea.tui import _bold_cyan, _cyan, _dim, _Spinner
 from tea.tui.runner_view import print_test_header, print_test_results
 
 
+@dataclass
+class TestCase:
+    path: Path
+    fn: Callable
+
+
 def _empty_check_results() -> dict[str, list[bool]]:
     return defaultdict(list)
 
@@ -57,7 +63,7 @@ def collect_fns(module: ModuleType) -> list[Callable]:
     ]
 
 
-def _discover_test_cases(target: str) -> list[tuple[Path, Callable]]:
+def _discover_test_cases(target: str) -> list[TestCase]:
     if "::" in target:
         file_part, fn_name = target.split("::", 1)
         path = Path(file_part)
@@ -66,11 +72,13 @@ def _discover_test_cases(target: str) -> list[tuple[Path, Callable]]:
         if fn is None:
             print(f"tea: '{fn_name}' not found in {file_part}")
             sys.exit(1)
-        return [(path, fn)]
+        return [TestCase(path, fn)]
 
     path = Path(target)
     return [
-        (f, fn) for f in discover_test_files(path) for fn in collect_fns(load_module(f))
+        TestCase(f, fn)
+        for f in discover_test_files(path)
+        for fn in collect_fns(load_module(f))
     ]
 
 
@@ -120,7 +128,7 @@ class TestRunner:
             result.iterations,
         )
 
-    def run_all(self, test_cases: list[tuple[Path, Callable]]) -> None:
+    def run_all(self, test_cases: list[TestCase]) -> None:
         if self._workers <= 1:
             self._run_sequential(test_cases)
         else:
@@ -160,16 +168,16 @@ class TestRunner:
             _active_checks.reset(ch_token)
         return collector, checks
 
-    def _run_sequential(self, test_cases: list[tuple[Path, Callable]]) -> None:
+    def _run_sequential(self, test_cases: list[TestCase]) -> None:
         last_file: Path | None = None
-        for file_path, fn in test_cases:
-            if file_path != last_file:
-                print(f"  {_cyan('──')} {_dim(str(file_path))}")
-                last_file = file_path
-            n = getattr(fn, "_tea_iterations", self._iterations)
-            self.run(fn, iterations=n)
+        for tc in test_cases:
+            if tc.path != last_file:
+                print(f"  {_cyan('──')} {_dim(str(tc.path))}")
+                last_file = tc.path
+            n = getattr(tc.fn, "_tea_iterations", self._iterations)
+            self.run(tc.fn, iterations=n)
 
-    def _run_parallel(self, test_cases: list[tuple[Path, Callable]]) -> None:
+    def _run_parallel(self, test_cases: list[TestCase]) -> None:
         total = len(test_cases)
         workers = self._workers
         print(f"  {_cyan('──')} running {total} test(s) with {workers} worker(s)\n")
@@ -188,24 +196,24 @@ class TestRunner:
                 running.add(name)
             spinner.set_label(_label())
 
-        def _work(fn: Callable) -> _CollectResult:
-            name = getattr(fn, "__name__", repr(fn))
+        def _work(tc: TestCase) -> _CollectResult:
+            name = getattr(tc.fn, "__name__", repr(tc.fn))
             _on_start(name)
-            n = getattr(fn, "_tea_iterations", self._iterations)
-            return self.collect(fn, iterations=n)
+            n = getattr(tc.fn, "_tea_iterations", self._iterations)
+            return self.collect(tc.fn, iterations=n)
 
-        futures_map: dict[Future, tuple[Path, Callable]] = {}
+        futures_map: dict[Future, TestCase] = {}
         executor = ThreadPoolExecutor(max_workers=self._workers)
         try:
             with _Spinner(_label()) as spinner:
-                for file_path, fn in test_cases:
-                    fut = executor.submit(_work, fn)
-                    futures_map[fut] = (file_path, fn)
+                for tc in test_cases:
+                    fut = executor.submit(_work, tc)
+                    futures_map[fut] = tc
 
                 last_file: Path | None = None
                 for fut in as_completed(futures_map):
-                    file_path, fn = futures_map[fut]
-                    name = getattr(fn, "__name__", repr(fn))
+                    tc = futures_map[fut]
+                    name = getattr(tc.fn, "__name__", repr(tc.fn))
 
                     with lock:
                         running.discard(name)
@@ -213,9 +221,9 @@ class TestRunner:
                     spinner.set_label(_label())
 
                     with spinner.paused():
-                        if file_path != last_file:
-                            print(f"  {_cyan('──')} {_dim(str(file_path))}")
-                            last_file = file_path
+                        if tc.path != last_file:
+                            print(f"  {_cyan('──')} {_dim(str(tc.path))}")
+                            last_file = tc.path
                         exc = fut.exception()
                         if exc:
                             print(f"\n  {_bold_cyan(name)}\n  error: {exc}\n")
