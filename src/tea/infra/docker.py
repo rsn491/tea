@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import threading
 import time
 from dataclasses import dataclass, field
@@ -26,6 +27,16 @@ class DockerRunResult:
     stderr: str
     exit_code: int
     duration_s: float = 0.0
+
+
+def ensure_image(tag: str, dockerfile: str) -> None:
+    client = docker.from_env()
+    try:
+        client.images.get(tag)
+        return
+    except docker.errors.ImageNotFound:
+        pass
+    client.images.build(fileobj=io.BytesIO(dockerfile.encode()), tag=tag, rm=True)
 
 
 class Docker:

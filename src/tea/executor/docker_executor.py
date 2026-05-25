@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from tea.infra import Docker, DockerRunConfig
+from tea.infra import Docker, DockerRunConfig, ensure_image
 
 from .executor import DockerSpec, Executor, RawResult
 
@@ -12,6 +12,8 @@ class DockerExecutor(Executor):
         self._docker = docker
 
     def run(self, spec: DockerSpec, workdir: str | None) -> RawResult:
+        if spec.dockerfile:
+            ensure_image(spec.image, spec.dockerfile)
         volumes = {workdir: _CONTAINER_WORKDIR} if workdir else {}
         volumes.update(spec.extra_volumes)
         container_cwd = _CONTAINER_WORKDIR if workdir else None
