@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from functools import cached_property
-from typing import Any, Callable
+from typing import Any, Callable, Literal
+
+StepType = Literal["text", "tool_use", "tool_result"]
 
 
 @dataclass
@@ -14,7 +16,7 @@ class ToolCall:
 
 @dataclass
 class Step:
-    type: str  # "text", "tool_use", "tool_result"
+    type: StepType
     content: str
     raw: dict[str, Any] = field(repr=False)
 
@@ -42,7 +44,7 @@ class AgentRun:
     stderr: str = ""
     duration_s: float = 0.0
     _files_changed_fn: Callable[[], dict[str, FileChange]] = field(
-        default=lambda: {}, repr=False, compare=False
+        init=False, default=lambda: {}, repr=False, compare=False
     )
 
     @cached_property

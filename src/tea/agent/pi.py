@@ -6,6 +6,7 @@ import os
 from tea.executor import DockerSpec, RawResult
 from tea.executor.docker_executor import DockerExecutor
 
+from ._utils import _esc
 from ._version import resolve_cli_version
 from .agent import Agent
 from .agent_run import AgentRun, Step, ToolCall
@@ -23,9 +24,7 @@ class Pi(Agent):
     def __init__(self, model_config: ModelConfig) -> None:
         self._model_config = model_config
 
-    def build_spec(
-        self, prompt: str, timeout: int, skills: list[str] = ()
-    ) -> DockerSpec:
+    def build_spec(self, prompt: str, timeout: int) -> DockerSpec:
         npm_prefix = "/home/node/.npm-global"
         env: dict[str, str] = {"HOME": "/home/node", "NPM_CONFIG_PREFIX": npm_prefix}
         api_key: str | None = None
@@ -240,10 +239,3 @@ def _read_skill_description(path: str) -> str:
     return ""
 
 
-def _esc(text: str) -> str:
-    return (
-        text.replace("\\", "\\\\")
-        .replace('"', '\\"')
-        .replace("`", "\\`")
-        .replace("$", "\\$")
-    )
