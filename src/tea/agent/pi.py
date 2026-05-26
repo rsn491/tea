@@ -194,7 +194,9 @@ def _parse(stdout: str) -> AgentRun:
                     if isinstance(block, dict) and block.get("type") == "text":
                         text = block.get("text", "")
                         if text:
-                            steps.append(Step(type=StepType.TEXT, content=text, raw=event))
+                            steps.append(
+                                Step(type=StepType.TEXT, content=text, raw=event)
+                            )
             elif isinstance(content, str) and content:
                 steps.append(Step(type=StepType.TEXT, content=content, raw=event))
 
@@ -206,7 +208,9 @@ def _parse(stdout: str) -> AgentRun:
                 args = {}
             tc = ToolCall(name=tool_name, input=args, tool_use_id=tool_call_id)
             tools.append(tc)
-            steps.append(Step(type=StepType.TOOL_USE, content=json.dumps(args), raw=event))
+            steps.append(
+                Step(type=StepType.TOOL_USE, content=json.dumps(args), raw=event)
+            )
 
         elif event_type == "tool_execution_end":
             result = event.get("result")
@@ -237,5 +241,3 @@ def _read_skill_description(path: str) -> str:
         if line.startswith("description:"):
             return line[len("description:") :].strip()
     return ""
-
-

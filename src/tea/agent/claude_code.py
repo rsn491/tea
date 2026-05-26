@@ -214,5 +214,3 @@ class ClaudeCodeHarness(ApiKeyHarness):
             DockerExecutor(),
             skills_sources=self.skills_sources,
         )
-
-

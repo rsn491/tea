@@ -7,8 +7,7 @@ import pytest
 from tea.agent.agent_run import AgentRun, FileChange, FileDiff, Step, StepType
 from tea.checkers import check_judge_task
 from tea.judge import HarnessJudge, Judge, JudgeResult
-from tea.judge.harness_judge import _parse
-from tea.judge.harness_judge import default_judge
+from tea.judge.harness_judge import _parse, default_judge
 from tea.judge.pydantic_ai import external_judge
 
 

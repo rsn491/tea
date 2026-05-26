@@ -132,5 +132,3 @@ def _parse_output(stdout: str) -> list[Step]:
         if line:
             steps.append(Step(type=StepType.TEXT, content=line, raw={}))
     return steps
-
-
