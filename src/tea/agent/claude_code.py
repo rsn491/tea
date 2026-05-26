@@ -11,7 +11,7 @@ from tea.executor.docker_executor import DockerExecutor
 from ._utils import _esc
 from ._version import resolve_cli_version
 from .agent import Agent
-from .agent_run import AgentRun, Step, ToolCall
+from .agent_run import AgentRun, Step, StepType, ToolCall
 from .harness import ApiKeyHarness, Harness
 
 _NODE_VERSION = "22"
@@ -169,7 +169,7 @@ class ClaudeCode(Agent):
                     block_type = block.get("type")
                     if block_type == "text":
                         steps.append(
-                            Step(type="text", content=block["text"], raw=block)
+                            Step(type=StepType.TEXT, content=block["text"], raw=block)
                         )
                     elif block_type == "tool_use":
                         tc = ToolCall(
@@ -180,7 +180,7 @@ class ClaudeCode(Agent):
                         tools.append(tc)
                         steps.append(
                             Step(
-                                type="tool_use",
+                                type=StepType.TOOL_USE,
                                 content=json.dumps(block.get("input", {})),
                                 raw=block,
                             )
@@ -197,7 +197,7 @@ class ClaudeCode(Agent):
                     )
                 else:
                     text = str(content)
-                steps.append(Step(type="tool_result", content=text, raw=msg))
+                steps.append(Step(type=StepType.TOOL_RESULT, content=text, raw=msg))
 
         return AgentRun(raw=stdout, steps=steps, tools=tools, skills=skills)
 

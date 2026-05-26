@@ -4,6 +4,7 @@ import json
 import os
 import re
 
+from tea.agent.agent_run import StepType
 from tea.agent.claude_code import ClaudeCode
 from tea.agent.harness import Harness
 from tea.executor.docker_executor import DockerExecutor
@@ -48,7 +49,7 @@ class HarnessJudge(Judge):
     def evaluate(self, content: str, prompt: str) -> JudgeResult:
         full_prompt = _JUDGE_PROMPT.format(prompt=prompt, content=content)
         run = self._harness.prompt(full_prompt).run()
-        text = "\n".join(s.content for s in run.steps if s.type == "text")
+        text = "\n".join(s.content for s in run.steps if s.type == StepType.TEXT)
         return _parse(text)
 
 

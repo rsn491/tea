@@ -1,4 +1,4 @@
-from tea.agent.agent_run import AgentRun, Step, ToolCall
+from tea.agent.agent_run import AgentRun, Step, StepType, ToolCall
 
 
 def test_tool_call_fields():
@@ -9,8 +9,8 @@ def test_tool_call_fields():
 
 
 def test_step_fields():
-    s = Step(type="text", content="hello", raw={"type": "text", "text": "hello"})
-    assert s.type == "text"
+    s = Step(type=StepType.TEXT, content="hello", raw={"type": "text", "text": "hello"})
+    assert s.type == StepType.TEXT
     assert s.content == "hello"
 
 
@@ -21,7 +21,7 @@ def test_agent_run_defaults():
 
 
 def test_agent_run_full():
-    steps = [Step(type="text", content="hi", raw={})]
+    steps = [Step(type=StepType.TEXT, content="hi", raw={})]
     tools = [ToolCall(name="Read", input={"path": "/tmp"}, tool_use_id="tu_1")]
     run = AgentRun(
         raw="some output", steps=steps, tools=tools, skills=["/review"], exit_code=0

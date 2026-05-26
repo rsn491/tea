@@ -1,6 +1,6 @@
 from tea.agent import Agents, RunBuilder
 from tea.agent.agent import Agent
-from tea.agent.agent_run import AgentRun, FileChange, FileDiff, Step, ToolCall
+from tea.agent.agent_run import AgentRun, FileChange, FileDiff, Step, StepType, ToolCall
 from tea.agent.claude_code import ClaudeCode, ClaudeCodeHarness
 from tea.agent.codex import Codex, CodexHarness
 from tea.agent.harness import ApiKeyHarness, Harness
@@ -39,6 +39,7 @@ __all__ = [
     "FileChange",
     "FileDiff",
     "Step",
+    "StepType",
     "ToolCall",
     "TestCase",
     "TestRunner",

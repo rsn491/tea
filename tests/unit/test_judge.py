@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from tea.agent.agent_run import AgentRun, FileChange, FileDiff, Step
+from tea.agent.agent_run import AgentRun, FileChange, FileDiff, Step, StepType
 from tea.checkers import check_judge_task
 from tea.judge import HarnessJudge, Judge, JudgeResult
 from tea.judge.harness_judge import _parse
@@ -90,9 +90,9 @@ def test_check_judge_task_raises_type_error_for_non_judge():
 
 def test_transcript_reconstructs_steps():
     steps = [
-        Step(type="text", content="hello", raw={}),
-        Step(type="tool_use", content='{"cmd": "ls"}', raw={}),
-        Step(type="tool_result", content="file.py", raw={}),
+        Step(type=StepType.TEXT, content="hello", raw={}),
+        Step(type=StepType.TOOL_USE, content='{"cmd": "ls"}', raw={}),
+        Step(type=StepType.TOOL_RESULT, content="file.py", raw={}),
     ]
     run = _make_run(steps)
     transcript = run.transcript

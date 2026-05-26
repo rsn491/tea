@@ -1,5 +1,6 @@
 import json
 
+from tea.agent.agent_run import StepType
 from tea.agent.claude_code import ClaudeCode
 
 parse = ClaudeCode._parse
@@ -50,14 +51,14 @@ def _lines(*msgs) -> str:
 def test_text_step():
     run = parse(_lines(INIT, ASSISTANT_TEXT))
     assert len(run.steps) == 1
-    assert run.steps[0].type == "text"
+    assert run.steps[0].type == StepType.TEXT
     assert run.steps[0].content == "I will help you."
 
 
 def test_tool_use_step_and_tool_call():
     run = parse(_lines(INIT, ASSISTANT_TOOL))
     assert len(run.steps) == 1
-    assert run.steps[0].type == "tool_use"
+    assert run.steps[0].type == StepType.TOOL_USE
     assert len(run.tools) == 1
     assert run.tools[0].name == "Bash"
     assert run.tools[0].input == {"command": "echo hello"}
@@ -66,7 +67,7 @@ def test_tool_use_step_and_tool_call():
 
 def test_tool_result_step():
     run = parse(_lines(INIT, ASSISTANT_TOOL, TOOL_RESULT))
-    tool_result_steps = [s for s in run.steps if s.type == "tool_result"]
+    tool_result_steps = [s for s in run.steps if s.type == StepType.TOOL_RESULT]
     assert len(tool_result_steps) == 1
     assert tool_result_steps[0].content == "hello"
 
@@ -105,8 +106,8 @@ def test_multi_block_assistant():
     }
     run = parse(_lines(INIT, msg))
     assert len(run.steps) == 2
-    assert run.steps[0].type == "text"
-    assert run.steps[1].type == "tool_use"
+    assert run.steps[0].type == StepType.TEXT
+    assert run.steps[1].type == StepType.TOOL_USE
     assert len(run.tools) == 1
 
 
@@ -117,5 +118,5 @@ def test_tool_result_string_content():
         "content": "plain string",
     }
     run = parse(_lines(INIT, result_msg))
-    tr = [s for s in run.steps if s.type == "tool_result"]
+    tr = [s for s in run.steps if s.type == StepType.TOOL_RESULT]
     assert tr[0].content == "plain string"

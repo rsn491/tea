@@ -10,7 +10,7 @@ from tea.executor.docker_executor import DockerExecutor
 from ._utils import _esc
 from ._version import resolve_cli_version
 from .agent import Agent
-from .agent_run import AgentRun, Step
+from .agent_run import AgentRun, Step, StepType
 from .harness import ApiKeyHarness, Harness
 
 _NODE_VERSION = "22"
@@ -130,7 +130,7 @@ def _parse_output(stdout: str) -> list[Step]:
     for line in stdout.splitlines():
         line = line.strip()
         if line:
-            steps.append(Step(type="text", content=line, raw={}))
+            steps.append(Step(type=StepType.TEXT, content=line, raw={}))
     return steps
 
 

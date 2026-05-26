@@ -9,7 +9,7 @@ from tea.executor.docker_executor import DockerExecutor
 from ._utils import _esc
 from ._version import resolve_cli_version
 from .agent import Agent
-from .agent_run import AgentRun, Step, ToolCall
+from .agent_run import AgentRun, Step, StepType, ToolCall
 from .harness import Harness
 from .model_config import ModelConfig
 
@@ -194,9 +194,9 @@ def _parse(stdout: str) -> AgentRun:
                     if isinstance(block, dict) and block.get("type") == "text":
                         text = block.get("text", "")
                         if text:
-                            steps.append(Step(type="text", content=text, raw=event))
+                            steps.append(Step(type=StepType.TEXT, content=text, raw=event))
             elif isinstance(content, str) and content:
-                steps.append(Step(type="text", content=content, raw=event))
+                steps.append(Step(type=StepType.TEXT, content=content, raw=event))
 
         elif event_type == "tool_execution_start":
             tool_name = event.get("toolName", "")
@@ -206,7 +206,7 @@ def _parse(stdout: str) -> AgentRun:
                 args = {}
             tc = ToolCall(name=tool_name, input=args, tool_use_id=tool_call_id)
             tools.append(tc)
-            steps.append(Step(type="tool_use", content=json.dumps(args), raw=event))
+            steps.append(Step(type=StepType.TOOL_USE, content=json.dumps(args), raw=event))
 
         elif event_type == "tool_execution_end":
             result = event.get("result")
@@ -216,7 +216,7 @@ def _parse(stdout: str) -> AgentRun:
                 content = str(result)
             else:
                 content = ""
-            steps.append(Step(type="tool_result", content=content, raw=event))
+            steps.append(Step(type=StepType.TOOL_RESULT, content=content, raw=event))
 
     return AgentRun(raw=stdout, steps=steps, tools=tools, skills=[])
 
