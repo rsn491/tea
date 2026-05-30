@@ -13,7 +13,7 @@ from ._utils import _esc
 from ._version import resolve_cli_version
 from .agent import Agent
 from .agent_run import AgentRun, Step, StepType, ToolCall
-from .harness import ApiKeyHarness, Harness
+from .harness import ApiKeyHarness, Harness, SubscriptionHarness
 
 _NODE_VERSION = "22"
 _CODEX_PACKAGE = "@openai/codex"
@@ -116,7 +116,7 @@ class Codex(Agent):
         return run
 
 
-class CodexHarness(ApiKeyHarness):
+class CodexHarness(ApiKeyHarness, SubscriptionHarness):
     def with_api_key(self) -> Harness:
         agent = self._agent
         model = agent.model if isinstance(agent, Codex) else _DEFAULT_MODEL
@@ -158,8 +158,7 @@ def _auth_setup(auth_json: str) -> str:
     """
     escaped = auth_json.replace("'", "'\\''")
     return (
-        f"mkdir -p {_CODEX_HOME}"
-        f" && printf '%s' '{escaped}' > {_CODEX_HOME}/auth.json"
+        f"mkdir -p {_CODEX_HOME} && printf '%s' '{escaped}' > {_CODEX_HOME}/auth.json"
     )
 
 
@@ -260,9 +259,7 @@ def _parse(stdout: str) -> AgentRun:
                 content = (
                     json.dumps(result) if isinstance(result, dict) else str(result)
                 )
-                steps.append(
-                    Step(type=StepType.TOOL_RESULT, content=content, raw=item)
-                )
+                steps.append(Step(type=StepType.TOOL_RESULT, content=content, raw=item))
 
         elif item_type == "web_search":
             query = item.get("query", "")

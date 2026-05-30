@@ -9,8 +9,17 @@ from tea.agent.codex import (
     _auth_setup,
     _parse,
 )
+from tea.agent.harness import ApiKeyHarness, SubscriptionHarness
 from tea.executor import RawResult
 from tea.executor.docker_executor import DockerExecutor
+
+
+def test_codex_harness_formalizes_both_auth_factories():
+    # CodexHarness adopts the shared ABCs so its auth construction is explicit
+    # and mirrors the contract other code-agents will follow.
+    harness = CodexHarness(Codex(), DockerExecutor())
+    assert isinstance(harness, ApiKeyHarness)
+    assert isinstance(harness, SubscriptionHarness)
 
 
 def _events(*events: dict) -> str:
@@ -239,7 +248,7 @@ def test_build_spec_oauth_does_not_set_openai_api_key(monkeypatch):
 
 def test_auth_setup_escapes_single_quotes():
     # a payload containing a single quote must not break out of the shell quoting
-    cmd = _auth_setup("{\"k\":\"a'b\"}")
+    cmd = _auth_setup('{"k":"a\'b"}')
     assert "'\\''" in cmd  # the '\'' escape sequence
     assert cmd.startswith("mkdir -p /home/node/.codex")
 
