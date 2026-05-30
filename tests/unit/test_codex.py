@@ -2,8 +2,15 @@ from __future__ import annotations
 
 import json
 
-from tea.agent.codex import Codex, _parse
+from tea.agent.codex import (
+    _DEFAULT_SUBSCRIPTION_MODEL,
+    Codex,
+    CodexHarness,
+    _auth_setup,
+    _parse,
+)
 from tea.executor import RawResult
+from tea.executor.docker_executor import DockerExecutor
 
 
 def _events(*events: dict) -> str:
@@ -199,3 +206,59 @@ def test_build_spec_uses_json_flag_and_default_model(monkeypatch):
 
 def test_codex_exposes_model_property():
     assert Codex(model="custom-model").model == "custom-model"
+
+
+# ── Subscription (ChatGPT OAuth) auth via env var ────────────────────────────
+
+
+def test_build_spec_writes_auth_json_when_oauth_env_set(monkeypatch):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("CODEX_AUTH_JSON", '{"auth_mode":"chatgpt","tokens":{}}')
+    spec = Codex().build_spec("task", 60)
+    assert spec.setup_command is not None
+    assert "mkdir -p /home/node/.codex" in spec.setup_command
+    assert "/home/node/.codex/auth.json" in spec.setup_command
+    # the credential payload is materialised, not bind-mounted
+    assert '{"auth_mode":"chatgpt","tokens":{}}' in spec.setup_command
+    assert spec.extra_volumes == {}
+
+
+def test_build_spec_no_auth_setup_without_env(monkeypatch):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("CODEX_AUTH_JSON", raising=False)
+    spec = Codex().build_spec("task", 60)
+    assert spec.setup_command is None
+
+
+def test_build_spec_oauth_does_not_set_openai_api_key(monkeypatch):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("CODEX_AUTH_JSON", "{}")
+    spec = Codex().build_spec("task", 60)
+    assert "OPENAI_API_KEY" not in spec.env
+
+
+def test_auth_setup_escapes_single_quotes():
+    # a payload containing a single quote must not break out of the shell quoting
+    cmd = _auth_setup("{\"k\":\"a'b\"}")
+    assert "'\\''" in cmd  # the '\'' escape sequence
+    assert cmd.startswith("mkdir -p /home/node/.codex")
+
+
+def test_with_subscription_defaults_to_subscription_model():
+    harness = CodexHarness(Codex(), DockerExecutor()).with_subscription()
+    assert isinstance(harness._agent, Codex)
+    assert harness._agent.model == _DEFAULT_SUBSCRIPTION_MODEL
+
+
+def test_with_subscription_preserves_explicit_model():
+    harness = CodexHarness(
+        Codex(model="gpt-5.3-codex-spark"), DockerExecutor()
+    ).with_subscription()
+    assert harness._agent.model == "gpt-5.3-codex-spark"
+
+
+def test_with_subscription_preserves_skills_sources():
+    harness = CodexHarness(
+        Codex(), DockerExecutor(), skills_sources=["custom/skills"]
+    ).with_subscription()
+    assert harness.skills_sources == ["custom/skills"]
