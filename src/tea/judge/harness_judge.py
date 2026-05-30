@@ -4,6 +4,7 @@ import json
 import os
 import re
 
+from tea.agent.agent_run import StepType
 from tea.agent.claude_code import ClaudeCode
 from tea.agent.harness import Harness
 from tea.executor.docker_executor import DockerExecutor
@@ -21,7 +22,7 @@ Respond with ONLY a JSON object, no other text:
 _DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 
 
-def _default_harness():
+def _default_harness() -> Harness:
     extra_volumes: dict[str, str] = {}
     host_claude_dir = os.path.expanduser("~/.claude")
     if os.path.isdir(host_claude_dir):
@@ -40,7 +41,7 @@ class HarnessJudge(Judge):
     credentials or dependencies are required.
     """
 
-    def __init__(self, harness=None) -> None:
+    def __init__(self, harness: Harness | None = None) -> None:
         if harness is None:
             harness = _default_harness()
         self._harness = harness
@@ -48,8 +49,13 @@ class HarnessJudge(Judge):
     def evaluate(self, content: str, prompt: str) -> JudgeResult:
         full_prompt = _JUDGE_PROMPT.format(prompt=prompt, content=content)
         run = self._harness.prompt(full_prompt).run()
-        text = "\n".join(s.content for s in run.steps if s.type == "text")
+        text = "\n".join(s.content for s in run.steps if s.type == StepType.TEXT)
         return _parse(text)
+
+
+def default_judge() -> Judge:
+    """Return the default judge (ClaudeCode harness-based)."""
+    return HarnessJudge()
 
 
 def _parse(text: str) -> JudgeResult:

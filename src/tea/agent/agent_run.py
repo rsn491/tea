@@ -1,8 +1,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import StrEnum
 from functools import cached_property
 from typing import Any, Callable
+
+
+class StepType(StrEnum):
+    TEXT = "text"
+    TOOL_USE = "tool_use"
+    TOOL_RESULT = "tool_result"
 
 
 @dataclass
@@ -14,7 +21,7 @@ class ToolCall:
 
 @dataclass
 class Step:
-    type: str  # "text", "tool_use", "tool_result"
+    type: StepType
     content: str
     raw: dict[str, Any] = field(repr=False)
 
@@ -42,7 +49,7 @@ class AgentRun:
     stderr: str = ""
     duration_s: float = 0.0
     _files_changed_fn: Callable[[], dict[str, FileChange]] = field(
-        default=lambda: {}, repr=False, compare=False
+        init=False, default=lambda: {}, repr=False, compare=False
     )
 
     @cached_property
@@ -57,11 +64,11 @@ class AgentRun:
     def transcript(self) -> str:
         parts = []
         for step in self.steps:
-            if step.type == "text":
+            if step.type == StepType.TEXT:
                 parts.append(f"[assistant] {step.content}")
-            elif step.type == "tool_use":
+            elif step.type == StepType.TOOL_USE:
                 parts.append(f"[tool_use] {step.content}")
-            elif step.type == "tool_result":
+            elif step.type == StepType.TOOL_RESULT:
                 parts.append(f"[tool_result] {step.content}")
         return "\n".join(parts)
 

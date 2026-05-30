@@ -14,7 +14,7 @@ import docker
 import pytest
 
 from tea import Agents
-from tea.agent.agent_run import AgentRun
+from tea.agent.agent_run import AgentRun, StepType
 
 
 def _docker_available() -> bool:
@@ -43,7 +43,7 @@ def test_claude_code_hello_world():
     assert isinstance(run.skills, list)
 
     # The agent should have produced at least one text step
-    text_steps = [s for s in run.steps if s.type == "text"]
+    text_steps = [s for s in run.steps if s.type == StepType.TEXT]
     assert len(text_steps) > 0, "expected at least one text step"
 
     # The combined text content should mention "hello"

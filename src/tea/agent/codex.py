@@ -7,9 +7,10 @@ from dataclasses import replace
 from tea.executor import DockerSpec, RawResult
 from tea.executor.docker_executor import DockerExecutor
 
+from ._utils import _esc
 from ._version import resolve_cli_version
 from .agent import Agent
-from .agent_run import AgentRun, Step
+from .agent_run import AgentRun, Step, StepType
 from .harness import ApiKeyHarness, Harness
 
 _NODE_VERSION = "22"
@@ -26,6 +27,10 @@ class Codex(Agent):
 
     def __init__(self, model: str = _DEFAULT_MODEL) -> None:
         self._model = model
+
+    @property
+    def model(self) -> str:
+        return self._model
 
     def build_spec(self, prompt: str, timeout: int) -> DockerSpec:
         npm_prefix = "/home/node/.npm-global"
@@ -95,7 +100,8 @@ class Codex(Agent):
 
 class CodexHarness(ApiKeyHarness):
     def with_api_key(self) -> Harness:
-        model = self._agent._model if isinstance(self._agent, Codex) else _DEFAULT_MODEL
+        agent = self._agent
+        model = agent.model if isinstance(agent, Codex) else _DEFAULT_MODEL
         return Harness(
             Codex(model=model),
             DockerExecutor(),
@@ -124,14 +130,5 @@ def _parse_output(stdout: str) -> list[Step]:
     for line in stdout.splitlines():
         line = line.strip()
         if line:
-            steps.append(Step(type="text", content=line, raw={}))
+            steps.append(Step(type=StepType.TEXT, content=line, raw={}))
     return steps
-
-
-def _esc(text: str) -> str:
-    return (
-        text.replace("\\", "\\\\")
-        .replace('"', '\\"')
-        .replace("`", "\\`")
-        .replace("$", "\\$")
-    )

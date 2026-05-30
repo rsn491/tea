@@ -40,8 +40,8 @@ class RunBuilder:
         self._text = text
         self._timeout = timeout
         self._workdir: str | None = None
-        self._skills_sources: list[str] | None = getattr(runner, "skills_sources", None)
-        self._defaults: tuple[str, ...] = getattr(runner, "default_skill_sources", ())
+        self._skills_sources: list[str] | None = runner.skills_sources
+        self._defaults: tuple[str, ...] = runner.default_skill_sources
 
     def workdir(self, path: str) -> RunBuilder:
         self._workdir = os.path.abspath(path)
