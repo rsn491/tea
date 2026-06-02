@@ -93,6 +93,7 @@ Callers (`Harness`, `check_judge_task`) depend only on the ABCs, never on concre
 | Variable | Purpose |
 |---|---|
 | `CLAUDE_CODE_OAUTH_TOKEN` | Auth token for the ClaudeCode agent running inside Docker |
+| `CODEX_AUTH_JSON` | Contents of `~/.codex/auth.json` for Codex subscription (ChatGPT OAuth) auth; written into the container at start-up (no host file mounted). Used by `Agents.Codex.with_subscription()` |
 | `CLAUDE_CODE_VERSION` | Pin the `@anthropic-ai/claude-code` version used inside Docker (auto-detected from `claude --version` / npm if unset) |
 | `CODEX_VERSION` | Pin the `@openai/codex` version used inside Docker (auto-detected from `codex --version` / npm if unset) |
 | `PI_VERSION` | Pin the `pi` version used inside Docker (auto-detected from `pi --version` / npm if unset) |

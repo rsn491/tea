@@ -89,7 +89,13 @@ Agents.Codex
     .run()
 ```
 
-Setup `OPENAI_API_KEY` (OpenAI API key).
+Setup `OPENAI_API_KEY` (API-key auth). For ChatGPT subscription (OAuth) auth,
+use `Agents.Codex.with_subscription()` and set `CODEX_AUTH_JSON` to the contents
+of your `~/.codex/auth.json` (e.g. `export CODEX_AUTH_JSON="$(cat ~/.codex/auth.json)"`);
+it is written into the container at start-up, no host file is mounted. Note the
+default model differs by auth mode (`gpt-5.2-codex` for API key, a
+subscription-compatible model for OAuth), since API-key models are rejected
+under ChatGPT-account auth.
 
 ### Pi
 

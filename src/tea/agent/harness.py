@@ -54,3 +54,17 @@ class Harness:
 class ApiKeyHarness(Harness, ABC):
     @abstractmethod
     def with_api_key(self) -> Harness: ...
+
+
+class SubscriptionHarness(Harness, ABC):
+    """Base for harnesses that can authenticate with subscription (OAuth) creds.
+
+    The OAuth counterpart to :class:`ApiKeyHarness`. Credentials are passed via
+    environment variables and materialised into the container at start-up,
+    mirroring how API-key auth forwards its key. A concrete code-agent harness
+    may implement both factories so a single ``Agents.X`` can authenticate
+    either way.
+    """
+
+    @abstractmethod
+    def with_subscription(self) -> Harness: ...

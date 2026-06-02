@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import os
+import re
 import shlex
 from dataclasses import replace
 
@@ -10,16 +12,24 @@ from tea.executor.docker_executor import DockerExecutor
 from ._utils import _esc
 from ._version import resolve_cli_version
 from .agent import Agent
-from .agent_run import AgentRun, Step, StepType
-from .harness import ApiKeyHarness, Harness
+from .agent_run import AgentRun, Step, StepType, ToolCall
+from .harness import ApiKeyHarness, Harness, SubscriptionHarness
 
 _NODE_VERSION = "22"
 _CODEX_PACKAGE = "@openai/codex"
 _CODEX_VERSION_ENV = "CODEX_VERSION"
-_DEFAULT_MODEL = "gpt-5.3-codex"
+_DEFAULT_MODEL = "gpt-5.2-codex"
+# gpt-5.2-codex is rejected under ChatGPT-account (subscription) auth, so OAuth
+# runs default to a subscription-compatible model instead.
+_DEFAULT_SUBSCRIPTION_MODEL = "gpt-5.3-codex"
+# Env var carrying the contents of ~/.codex/auth.json for subscription auth.
+_CODEX_AUTH_ENV = "CODEX_AUTH_JSON"
 
 # DockerExecutor mounts the workdir at this path; install_skills relies on it.
 _CONTAINER_WORKDIR = "/workspace"
+# Codex reads auth + skills from CODEX_HOME (defaults to ~/.codex). HOME is set
+# to /home/node in the container, so ~/.codex resolves here.
+_CODEX_HOME = "/home/node/.codex"
 
 
 class Codex(Agent):
@@ -35,20 +45,29 @@ class Codex(Agent):
     def build_spec(self, prompt: str, timeout: int) -> DockerSpec:
         npm_prefix = "/home/node/.npm-global"
         env: dict[str, str] = {"HOME": "/home/node", "NPM_CONFIG_PREFIX": npm_prefix}
+        setup_command: str | None = None
+        # API-key auth: forward OPENAI_API_KEY (recommended for programmatic use).
         if api_key := os.environ.get("OPENAI_API_KEY"):
             env["OPENAI_API_KEY"] = api_key
+        # Subscription (ChatGPT OAuth) auth: codex reads credentials from
+        # $CODEX_HOME/auth.json. Instead of bind-mounting the host file, take the
+        # credential JSON from an env var and write it inside the container at
+        # start-up — keeps auth env-var-driven with no host path leaking in.
+        if auth_json := os.environ.get(_CODEX_AUTH_ENV):
+            setup_command = _auth_setup(auth_json)
 
         version = self.version()
         image = f"tea-codex:{version}"
 
         return DockerSpec(
             command=(
-                f"{npm_prefix}/bin/codex exec"
+                f"{npm_prefix}/bin/codex exec --json"
                 f" --dangerously-bypass-approvals-and-sandbox"
                 f" --skip-git-repo-check --ephemeral"
                 f" -m {shlex.quote(self._model)}"
                 f' "{_esc(prompt)}"'
             ),
+            setup_command=setup_command,
             dockerfile=self._dockerfile(version),
             env=env,
             image=image,
@@ -90,15 +109,14 @@ class Codex(Agent):
         )
 
     def parse(self, raw: RawResult) -> AgentRun:
-        steps = _parse_output(raw.stdout)
-        run = AgentRun(raw=raw.stdout, steps=steps, tools=[], skills=[])
+        run = _parse(raw.stdout)
         run.exit_code = raw.exit_code
         run.stderr = raw.stderr
         run.duration_s = raw.duration_s
         return run
 
 
-class CodexHarness(ApiKeyHarness):
+class CodexHarness(ApiKeyHarness, SubscriptionHarness):
     def with_api_key(self) -> Harness:
         agent = self._agent
         model = agent.model if isinstance(agent, Codex) else _DEFAULT_MODEL
@@ -107,6 +125,41 @@ class CodexHarness(ApiKeyHarness):
             DockerExecutor(),
             skills_sources=self.skills_sources,
         )
+
+    def with_subscription(self) -> Harness:
+        """Harness for ChatGPT-subscription (OAuth) auth.
+
+        Credentials are supplied via the ``CODEX_AUTH_JSON`` env var (the contents
+        of the host ``~/.codex/auth.json``); ``build_spec`` writes them into the
+        container at start-up — no host file is mounted, mirroring how API-key
+        auth forwards ``OPENAI_API_KEY``. Defaults to a subscription-compatible
+        model because the API-key default (gpt-5.2-codex) is rejected under
+        ChatGPT-account auth; an explicitly configured model is preserved.
+        """
+        agent = self._agent
+        model = (
+            agent.model
+            if isinstance(agent, Codex) and agent.model != _DEFAULT_MODEL
+            else _DEFAULT_SUBSCRIPTION_MODEL
+        )
+        return Harness(
+            Codex(model=model),
+            DockerExecutor(),
+            skills_sources=self.skills_sources,
+        )
+
+
+def _auth_setup(auth_json: str) -> str:
+    """Write subscription OAuth credentials into the container's CODEX_HOME.
+
+    Mirrors Pi's models.json materialisation: the credential JSON arrives via an
+    env var and is written to ``$CODEX_HOME/auth.json`` at start-up, so no host
+    file is bind-mounted. Single quotes in the payload are escaped for the shell.
+    """
+    escaped = auth_json.replace("'", "'\\''")
+    return (
+        f"mkdir -p {_CODEX_HOME} && printf '%s' '{escaped}' > {_CODEX_HOME}/auth.json"
+    )
 
 
 def _skill_setup(skills: list[str], source_for: dict[str, str]) -> str:
@@ -125,10 +178,96 @@ def _skill_setup(skills: list[str], source_for: dict[str, str]) -> str:
     return " && ".join(cmds)
 
 
-def _parse_output(stdout: str) -> list[Step]:
+_SKILL_PATH_RE = re.compile(r"(?:^|[\s/\"'])skills/([A-Za-z0-9_.-]+)/SKILL\.md")
+
+
+def _parse(stdout: str) -> AgentRun:
+    """Parse codex's ``--json`` JSONL event stream.
+
+    Codex emits one event per line: ``thread.started``, ``turn.started``,
+    ``item.started`` / ``item.completed`` (with an ``item.type`` of
+    ``agent_message``, ``reasoning``, ``command_execution``, ``file_change``,
+    ``mcp_tool_call``, ``web_search``, ``todo_list``, ``error``), and
+    ``turn.completed`` / ``turn.failed``. See
+    https://developers.openai.com/codex/noninteractive.
+    """
     steps: list[Step] = []
+    tools: list[ToolCall] = []
+    skills: list[str] = []
+
     for line in stdout.splitlines():
         line = line.strip()
-        if line:
-            steps.append(Step(type=StepType.TEXT, content=line, raw={}))
-    return steps
+        if not line:
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if event.get("type") != "item.completed":
+            continue
+
+        item = event.get("item") or {}
+        item_type = item.get("type")
+        item_id = str(item.get("id", ""))
+
+        if item_type in ("agent_message", "reasoning"):
+            text = item.get("text", "")
+            if text:
+                steps.append(Step(type=StepType.TEXT, content=text, raw=item))
+
+        elif item_type == "command_execution":
+            command = item.get("command", "")
+            tool_input = {"command": command}
+            tc = ToolCall(name="bash", input=tool_input, tool_use_id=item_id)
+            tools.append(tc)
+            steps.append(
+                Step(type=StepType.TOOL_USE, content=json.dumps(tool_input), raw=item)
+            )
+            steps.append(
+                Step(
+                    type=StepType.TOOL_RESULT,
+                    content=item.get("aggregated_output", ""),
+                    raw=item,
+                )
+            )
+            for match in _SKILL_PATH_RE.finditer(command):
+                name = match.group(1)
+                if name not in skills:
+                    skills.append(name)
+
+        elif item_type == "file_change":
+            changes = item.get("changes", [])
+            tool_input = {"changes": changes}
+            tc = ToolCall(name="apply_patch", input=tool_input, tool_use_id=item_id)
+            tools.append(tc)
+            steps.append(
+                Step(type=StepType.TOOL_USE, content=json.dumps(tool_input), raw=item)
+            )
+
+        elif item_type == "mcp_tool_call":
+            tool_name = item.get("tool") or item.get("tool_name", "")
+            args = item.get("arguments") or {}
+            if not isinstance(args, dict):
+                args = {}
+            tc = ToolCall(name=tool_name, input=args, tool_use_id=item_id)
+            tools.append(tc)
+            steps.append(
+                Step(type=StepType.TOOL_USE, content=json.dumps(args), raw=item)
+            )
+            result = item.get("result")
+            if result is not None:
+                content = (
+                    json.dumps(result) if isinstance(result, dict) else str(result)
+                )
+                steps.append(Step(type=StepType.TOOL_RESULT, content=content, raw=item))
+
+        elif item_type == "web_search":
+            query = item.get("query", "")
+            tool_input = {"query": query}
+            tc = ToolCall(name="web_search", input=tool_input, tool_use_id=item_id)
+            tools.append(tc)
+            steps.append(
+                Step(type=StepType.TOOL_USE, content=json.dumps(tool_input), raw=item)
+            )
+
+    return AgentRun(raw=stdout, steps=steps, tools=tools, skills=skills)
