@@ -171,32 +171,13 @@ def check_diff_removed(
     return check(label, found)
 
 
-def check_judge_task(
-    run: AgentRun,
+def _check_judge(
+    diff_to_evaluate: str,
     judge_prompt: str,
-    diff_to_evaluate: str | None = None,
-    min_score: float = 0.5,
-    judge: object | None = None,
+    min_score: float,
+    judge: object | None,
 ) -> float:
-    """Score a diff with an LLM judge and assert it meets a threshold.
-
-    Args:
-        run: The completed agent run to inspect.
-        judge_prompt: Scoring criteria handed to the judge.
-        diff_to_evaluate: The diff text to evaluate. Defaults to the run's
-            ``full_diff`` (every file changed) when omitted; pass an explicit
-            value to narrow it, e.g. ``run.diff("file.py")`` or ``run.transcript``.
-        min_score: Minimum score (inclusive) required to pass. Defaults to 0.5.
-        judge: A :class:`Judge` instance; falls back to ``default_judge()``.
-
-    Returns:
-        The judge's score as a ``float``.
-
-    Raises:
-        TypeError: If ``judge`` is provided but is not a :class:`Judge`.
-    """
-    if diff_to_evaluate is None:
-        diff_to_evaluate = run.full_diff
+    """Run a judge over ``diff_to_evaluate`` and record the threshold check."""
     if judge is None:
         judge = default_judge()
 
@@ -206,3 +187,54 @@ def check_judge_task(
     label = f"judge score {result.score:.2f} >= {min_score} | {result.rationale}"
     check(label, result.score >= min_score)
     return result.score
+
+
+def check_judge_diff(
+    run: AgentRun,
+    judge_prompt: str,
+    diff_to_evaluate: str,
+    min_score: float = 0.5,
+    judge: object | None = None,
+) -> float:
+    """Score a specific diff with an LLM judge and assert it meets a threshold.
+
+    Args:
+        run: The completed agent run to inspect.
+        judge_prompt: Scoring criteria handed to the judge.
+        diff_to_evaluate: The diff text to evaluate, e.g. ``run.diff("file.py")``
+            or ``run.transcript``.
+        min_score: Minimum score (inclusive) required to pass. Defaults to 0.5.
+        judge: A :class:`Judge` instance; falls back to ``default_judge()``.
+
+    Returns:
+        The judge's score as a ``float``.
+
+    Raises:
+        TypeError: If ``judge`` is provided but is not a :class:`Judge`.
+    """
+    return _check_judge(diff_to_evaluate, judge_prompt, min_score, judge)
+
+
+def check_judge_run(
+    run: AgentRun,
+    judge_prompt: str,
+    min_score: float = 0.5,
+    judge: object | None = None,
+) -> float:
+    """Score the whole-run diff with an LLM judge and assert it meets a threshold.
+
+    Evaluates ``run.full_diff`` — the unified diff across every file changed.
+
+    Args:
+        run: The completed agent run to inspect.
+        judge_prompt: Scoring criteria handed to the judge.
+        min_score: Minimum score (inclusive) required to pass. Defaults to 0.5.
+        judge: A :class:`Judge` instance; falls back to ``default_judge()``.
+
+    Returns:
+        The judge's score as a ``float``.
+
+    Raises:
+        TypeError: If ``judge`` is provided but is not a :class:`Judge`.
+    """
+    return _check_judge(run.full_diff, judge_prompt, min_score, judge)

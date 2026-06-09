@@ -74,7 +74,8 @@ optional `description` to override the generated label, and—inside a
 | `check_file_not_changed(run, file)` | `file` was left untouched | `bool` |
 | `check_diff_added(run, file, code)` | `code` appears in `file`'s added lines | `bool` |
 | `check_diff_removed(run, file, code)` | `code` appears in `file`'s removed lines | `bool` |
-| `check_judge_task(run, judge_prompt, diff_to_evaluate=None, min_score=0.5, judge=None)` | an LLM judge scores the diff (whole-run by default) ≥ `min_score` | `float` (score) |
+| `check_judge_diff(run, judge_prompt, diff_to_evaluate, min_score=0.5, judge=None)` | an LLM judge scores `diff_to_evaluate` ≥ `min_score` | `float` (score) |
+| `check_judge_run(run, judge_prompt, min_score=0.5, judge=None)` | an LLM judge scores the whole-run diff ≥ `min_score` | `float` (score) |
 
 ## Agents
 
