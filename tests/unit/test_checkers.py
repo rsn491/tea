@@ -9,7 +9,10 @@ from tea.checkers import (
     check_diff_added,
     check_diff_removed,
     check_file_changed,
+    check_file_not_changed,
+    check_skill_not_used,
     check_skill_used,
+    check_tool_not_used,
     check_tool_used,
 )
 
@@ -91,6 +94,21 @@ def test_check_skill_used_custom_description():
     assert checks == [("used the skill", True)]
 
 
+# ── check_skill_not_used ──────────────────────────────────────────────────────
+
+
+def test_check_skill_not_used_pass():
+    run = _run(skills=[])
+    checks = _collected(lambda: check_skill_not_used(run, "forbidden"))
+    assert checks == [("skill 'forbidden' not used", True)]
+
+
+def test_check_skill_not_used_fail():
+    run = _run(skills=["forbidden"])
+    checks = _collected(lambda: check_skill_not_used(run, "forbidden"))
+    assert checks == [("skill 'forbidden' not used", False)]
+
+
 # ── check_tool_used ───────────────────────────────────────────────────────────
 
 
@@ -106,6 +124,21 @@ def test_check_tool_used_fail():
     assert checks == [("tool 'Edit' used", False)]
 
 
+# ── check_tool_not_used ───────────────────────────────────────────────────────
+
+
+def test_check_tool_not_used_pass():
+    run = _run(tools=[ToolCall(name="Read", input={}, tool_use_id="1")])
+    checks = _collected(lambda: check_tool_not_used(run, "Bash"))
+    assert checks == [("tool 'Bash' not used", True)]
+
+
+def test_check_tool_not_used_fail():
+    run = _run(tools=[ToolCall(name="Bash", input={}, tool_use_id="1")])
+    checks = _collected(lambda: check_tool_not_used(run, "Bash"))
+    assert checks == [("tool 'Bash' not used", False)]
+
+
 # ── check_file_changed ────────────────────────────────────────────────────────
 
 
@@ -119,6 +152,21 @@ def test_check_file_changed_fail():
     run = _run(files={})
     checks = _collected(lambda: check_file_changed(run, "calculator.py"))
     assert checks == [("calculator.py changed", False)]
+
+
+# ── check_file_not_changed ────────────────────────────────────────────────────
+
+
+def test_check_file_not_changed_pass():
+    run = _run(files={})
+    checks = _collected(lambda: check_file_not_changed(run, "calculator.py"))
+    assert checks == [("calculator.py not changed", True)]
+
+
+def test_check_file_not_changed_fail():
+    run = _run(files={"calculator.py": _change("calculator.py")})
+    checks = _collected(lambda: check_file_not_changed(run, "calculator.py"))
+    assert checks == [("calculator.py not changed", False)]
 
 
 # ── check_diff_added ──────────────────────────────────────────────────────────

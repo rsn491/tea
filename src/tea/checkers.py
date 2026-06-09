@@ -47,6 +47,24 @@ def check_skill_used(run: AgentRun, skill: str, description: str | None = None) 
     return check(label, skill in run.skills)
 
 
+def check_skill_not_used(
+    run: AgentRun, skill: str, description: str | None = None
+) -> bool:
+    """Assert that the agent did not invoke a given skill during the run.
+
+    Args:
+        run: The completed agent run to inspect.
+        skill: Name of the skill expected to be absent.
+        description: Optional custom label; defaults to a generated one.
+
+    Returns:
+        ``True`` if the skill was not used, ``False`` otherwise.
+    """
+    label = description or f"skill '{skill}' not used"
+    return check(label, skill not in run.skills)
+
+
+
 def check_tool_used(run: AgentRun, tool: str, description: str | None = None) -> bool:
     """Assert that the agent invoked a given tool during the run.
 
@@ -60,6 +78,23 @@ def check_tool_used(run: AgentRun, tool: str, description: str | None = None) ->
     """
     label = description or f"tool '{tool}' used"
     return check(label, any(t.name == tool for t in run.tools))
+
+
+def check_tool_not_used(
+    run: AgentRun, tool: str, description: str | None = None
+) -> bool:
+    """Assert that the agent did not invoke a given tool during the run.
+
+    Args:
+        run: The completed agent run to inspect.
+        tool: Name of the tool expected to be absent.
+        description: Optional custom label; defaults to a generated one.
+
+    Returns:
+        ``True`` if the tool was not called, ``False`` otherwise.
+    """
+    label = description or f"tool '{tool}' not used"
+    return check(label, not any(t.name == tool for t in run.tools))
 
 
 def check_file_changed(
@@ -77,6 +112,23 @@ def check_file_changed(
     """
     label = description or f"{file} changed"
     return check(label, file in run.files_changed)
+
+
+def check_file_not_changed(
+    run: AgentRun, file: str, description: str | None = None
+) -> bool:
+    """Assert that the agent left a given file untouched during the run.
+
+    Args:
+        run: The completed agent run to inspect.
+        file: Path of the file expected to be unchanged.
+        description: Optional custom label; defaults to a generated one.
+
+    Returns:
+        ``True`` if the file was not changed, ``False`` otherwise.
+    """
+    label = description or f"{file} not changed"
+    return check(label, file not in run.files_changed)
 
 
 def check_diff_added(

@@ -11,8 +11,11 @@ from tea.checkers import (
     check_diff_added,
     check_diff_removed,
     check_file_changed,
+    check_file_not_changed,
     check_judge_task,
+    check_skill_not_used,
     check_skill_used,
+    check_tool_not_used,
     check_tool_used,
 )
 from tea.executor import DockerSpec, ExecutionSpec, Executor, RawResult
@@ -51,8 +54,11 @@ __all__ = [
     "check_diff_added",
     "check_diff_removed",
     "check_file_changed",
+    "check_file_not_changed",
     "check_judge_task",
+    "check_skill_not_used",
     "check_skill_used",
+    "check_tool_not_used",
     "check_tool_used",
     "HarnessJudge",
     "Judge",

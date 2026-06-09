@@ -67,8 +67,11 @@ optional `description` to override the generated label, and—inside a
 from tea import (
     check,
     check_skill_used,
+    check_skill_not_used,
     check_tool_used,
+    check_tool_not_used,
     check_file_changed,
+    check_file_not_changed,
     check_diff_added,
     check_diff_removed,
     check_judge_task,
@@ -76,8 +79,11 @@ from tea import (
 
 check("label", condition)                          # generic named assertion
 check_skill_used(run, "skill-name")                # a skill was invoked
+check_skill_not_used(run, "skill-name")            # a skill was NOT invoked
 check_tool_used(run, "Edit")                        # a tool was called
+check_tool_not_used(run, "Bash")                    # a tool was NOT called
 check_file_changed(run, "file.py")                  # a file was created or modified
+check_file_not_changed(run, "file.py")              # a file was left untouched
 check_diff_added(run, "file.py", "some_symbol")    # code was added to a file
 check_diff_removed(run, "file.py", "old_symbol")   # code was removed from a file
 check_judge_task(run, diff=run.diff("file.py"), prompt="scoring criteria")  # LLM-as-judge assertion
@@ -87,8 +93,11 @@ check_judge_task(run, diff=run.diff("file.py"), prompt="scoring criteria")  # LL
 |---|---|---|
 | `check(label, condition)` | `condition` is truthy | `bool` |
 | `check_skill_used(run, skill)` | the agent used `skill` | `bool` |
+| `check_skill_not_used(run, skill)` | the agent did not use `skill` | `bool` |
 | `check_tool_used(run, tool)` | the agent called `tool` | `bool` |
+| `check_tool_not_used(run, tool)` | the agent did not call `tool` | `bool` |
 | `check_file_changed(run, file)` | `file` was created or modified | `bool` |
+| `check_file_not_changed(run, file)` | `file` was left untouched | `bool` |
 | `check_diff_added(run, file, code)` | `code` appears in `file`'s added lines | `bool` |
 | `check_diff_removed(run, file, code)` | `code` appears in `file`'s removed lines | `bool` |
 | `check_judge_task(run, *, diff, prompt, min_score=0.5, judge=None)` | an LLM judge scores `diff` ≥ `min_score` | `float` (score) |
