@@ -56,38 +56,12 @@ tea examples/demo_calculator/agent-tests/test_add_new_operation.py::test_add_min
 
 See [examples/demo_calculator/agent-tests](examples/demo_calculator/agent-tests) for runnable examples.
 
-## Assertions
+## Checkers
 
 Every `check_*` helper takes the `run` as its first argument, accepts an
 optional `description` to override the generated label, and—inside a
 `TestRunner`—records pass/fail without halting the test (outside one it raises
 `AssertionError`).
-
-```python
-from tea import (
-    check,
-    check_skill_used,
-    check_skill_not_used,
-    check_tool_used,
-    check_tool_not_used,
-    check_file_changed,
-    check_file_not_changed,
-    check_diff_added,
-    check_diff_removed,
-    check_judge_task,
-)
-
-check("label", condition)                          # generic named assertion
-check_skill_used(run, "skill-name")                # a skill was invoked
-check_skill_not_used(run, "skill-name")            # a skill was NOT invoked
-check_tool_used(run, "Edit")                        # a tool was called
-check_tool_not_used(run, "Bash")                    # a tool was NOT called
-check_file_changed(run, "file.py")                  # a file was created or modified
-check_file_not_changed(run, "file.py")              # a file was left untouched
-check_diff_added(run, "file.py", "some_symbol")    # code was added to a file
-check_diff_removed(run, "file.py", "old_symbol")   # code was removed from a file
-check_judge_task(run, "scoring criteria")           # LLM-as-judge over the whole-run diff
-```
 
 | Checker | Asserts that… | Returns |
 |---|---|---|
