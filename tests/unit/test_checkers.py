@@ -73,19 +73,23 @@ def test_check_returns_true_outside_runner_on_pass():
     assert check("ok", True) is True
 
 
+# Outcome tests below run outside a runner (no active-checks context), so a
+# passing checker returns True and a failing checker raises AssertionError.
+# Label content is covered by the custom-description and check() recording tests.
+
+
 # ── check_skill_used ──────────────────────────────────────────────────────────
 
 
 def test_check_skill_used_pass():
     run = _run(skills=["add-new-operation"])
-    checks = _collected(lambda: check_skill_used(run, "add-new-operation"))
-    assert checks == [("skill 'add-new-operation' used", True)]
+    assert check_skill_used(run, "add-new-operation") is True
 
 
 def test_check_skill_used_fail():
     run = _run(skills=[])
-    checks = _collected(lambda: check_skill_used(run, "missing"))
-    assert checks == [("skill 'missing' used", False)]
+    with pytest.raises(AssertionError):
+        check_skill_used(run, "missing")
 
 
 def test_check_skill_used_custom_description():
@@ -99,14 +103,13 @@ def test_check_skill_used_custom_description():
 
 def test_check_skill_not_used_pass():
     run = _run(skills=[])
-    checks = _collected(lambda: check_skill_not_used(run, "forbidden"))
-    assert checks == [("skill 'forbidden' not used", True)]
+    assert check_skill_not_used(run, "forbidden") is True
 
 
 def test_check_skill_not_used_fail():
     run = _run(skills=["forbidden"])
-    checks = _collected(lambda: check_skill_not_used(run, "forbidden"))
-    assert checks == [("skill 'forbidden' not used", False)]
+    with pytest.raises(AssertionError):
+        check_skill_not_used(run, "forbidden")
 
 
 # ── check_tool_used ───────────────────────────────────────────────────────────
@@ -114,14 +117,13 @@ def test_check_skill_not_used_fail():
 
 def test_check_tool_used_pass():
     run = _run(tools=[ToolCall(name="Edit", input={}, tool_use_id="1")])
-    checks = _collected(lambda: check_tool_used(run, "Edit"))
-    assert checks == [("tool 'Edit' used", True)]
+    assert check_tool_used(run, "Edit") is True
 
 
 def test_check_tool_used_fail():
     run = _run(tools=[ToolCall(name="Read", input={}, tool_use_id="1")])
-    checks = _collected(lambda: check_tool_used(run, "Edit"))
-    assert checks == [("tool 'Edit' used", False)]
+    with pytest.raises(AssertionError):
+        check_tool_used(run, "Edit")
 
 
 # ── check_tool_not_used ───────────────────────────────────────────────────────
@@ -129,14 +131,13 @@ def test_check_tool_used_fail():
 
 def test_check_tool_not_used_pass():
     run = _run(tools=[ToolCall(name="Read", input={}, tool_use_id="1")])
-    checks = _collected(lambda: check_tool_not_used(run, "Bash"))
-    assert checks == [("tool 'Bash' not used", True)]
+    assert check_tool_not_used(run, "Bash") is True
 
 
 def test_check_tool_not_used_fail():
     run = _run(tools=[ToolCall(name="Bash", input={}, tool_use_id="1")])
-    checks = _collected(lambda: check_tool_not_used(run, "Bash"))
-    assert checks == [("tool 'Bash' not used", False)]
+    with pytest.raises(AssertionError):
+        check_tool_not_used(run, "Bash")
 
 
 # ── check_file_changed ────────────────────────────────────────────────────────
@@ -144,14 +145,13 @@ def test_check_tool_not_used_fail():
 
 def test_check_file_changed_pass():
     run = _run(files={"calculator.py": _change("calculator.py")})
-    checks = _collected(lambda: check_file_changed(run, "calculator.py"))
-    assert checks == [("calculator.py changed", True)]
+    assert check_file_changed(run, "calculator.py") is True
 
 
 def test_check_file_changed_fail():
     run = _run(files={})
-    checks = _collected(lambda: check_file_changed(run, "calculator.py"))
-    assert checks == [("calculator.py changed", False)]
+    with pytest.raises(AssertionError):
+        check_file_changed(run, "calculator.py")
 
 
 # ── check_file_not_changed ────────────────────────────────────────────────────
@@ -159,14 +159,13 @@ def test_check_file_changed_fail():
 
 def test_check_file_not_changed_pass():
     run = _run(files={})
-    checks = _collected(lambda: check_file_not_changed(run, "calculator.py"))
-    assert checks == [("calculator.py not changed", True)]
+    assert check_file_not_changed(run, "calculator.py") is True
 
 
 def test_check_file_not_changed_fail():
     run = _run(files={"calculator.py": _change("calculator.py")})
-    checks = _collected(lambda: check_file_not_changed(run, "calculator.py"))
-    assert checks == [("calculator.py not changed", False)]
+    with pytest.raises(AssertionError):
+        check_file_not_changed(run, "calculator.py")
 
 
 # ── check_diff_added ──────────────────────────────────────────────────────────
@@ -174,20 +173,19 @@ def test_check_file_not_changed_fail():
 
 def test_check_diff_added_pass():
     run = _run(files={"f.py": _change("f.py", added="def minus(): ...")})
-    checks = _collected(lambda: check_diff_added(run, "f.py", "minus"))
-    assert checks == [("'minus' added in f.py", True)]
+    assert check_diff_added(run, "f.py", "minus") is True
 
 
 def test_check_diff_added_fail_when_missing_from_added():
     run = _run(files={"f.py": _change("f.py", removed="minus")})
-    checks = _collected(lambda: check_diff_added(run, "f.py", "minus"))
-    assert checks == [("'minus' added in f.py", False)]
+    with pytest.raises(AssertionError):
+        check_diff_added(run, "f.py", "minus")
 
 
 def test_check_diff_added_fail_when_file_absent():
     run = _run(files={})
-    checks = _collected(lambda: check_diff_added(run, "f.py", "minus"))
-    assert checks == [("'minus' added in f.py", False)]
+    with pytest.raises(AssertionError):
+        check_diff_added(run, "f.py", "minus")
 
 
 # ── check_diff_removed ────────────────────────────────────────────────────────
@@ -195,17 +193,16 @@ def test_check_diff_added_fail_when_file_absent():
 
 def test_check_diff_removed_pass():
     run = _run(files={"f.py": _change("f.py", removed="def legacy(): ...")})
-    checks = _collected(lambda: check_diff_removed(run, "f.py", "legacy"))
-    assert checks == [("'legacy' removed from f.py", True)]
+    assert check_diff_removed(run, "f.py", "legacy") is True
 
 
 def test_check_diff_removed_fail_when_missing_from_removed():
     run = _run(files={"f.py": _change("f.py", added="legacy")})
-    checks = _collected(lambda: check_diff_removed(run, "f.py", "legacy"))
-    assert checks == [("'legacy' removed from f.py", False)]
+    with pytest.raises(AssertionError):
+        check_diff_removed(run, "f.py", "legacy")
 
 
 def test_check_diff_removed_fail_when_file_absent():
     run = _run(files={})
-    checks = _collected(lambda: check_diff_removed(run, "f.py", "legacy"))
-    assert checks == [("'legacy' removed from f.py", False)]
+    with pytest.raises(AssertionError):
+        check_diff_removed(run, "f.py", "legacy")
