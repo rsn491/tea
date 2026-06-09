@@ -49,7 +49,7 @@ def test_stub_judge_satisfies_seam():
 def test_check_judge_task_passes_when_score_meets_threshold():
     run = _make_run()
     score = check_judge_task(
-        run, diff="diff text", prompt="p", min_score=0.8, judge=_StubJudge(0.9)
+        run, "p", "diff text", min_score=0.8, judge=_StubJudge(0.9)
     )
     assert score == 0.9
 
@@ -57,7 +57,7 @@ def test_check_judge_task_passes_when_score_meets_threshold():
 def test_check_judge_task_passes_at_exact_threshold():
     run = _make_run()
     score = check_judge_task(
-        run, diff="diff text", prompt="p", min_score=0.5, judge=_StubJudge(0.5)
+        run, "p", "diff text", min_score=0.5, judge=_StubJudge(0.5)
     )
     assert score == 0.5
 
@@ -66,22 +66,37 @@ def test_check_judge_task_raises_when_score_below_threshold():
     run = _make_run()
     with pytest.raises(AssertionError):
         check_judge_task(
-            run, diff="diff text", prompt="p", min_score=0.8, judge=_StubJudge(0.4)
+            run, "p", "diff text", min_score=0.8, judge=_StubJudge(0.4)
         )
 
 
 def test_check_judge_task_returns_float():
     run = _make_run()
-    result = check_judge_task(
-        run, diff="x", prompt="p", min_score=0.0, judge=_StubJudge(0.6)
-    )
+    result = check_judge_task(run, "p", "x", min_score=0.0, judge=_StubJudge(0.6))
     assert isinstance(result, float)
 
 
 def test_check_judge_task_raises_type_error_for_non_judge():
     run = _make_run()
     with pytest.raises(TypeError, match="Judge instance"):
-        check_judge_task(run, diff="x", prompt="p", judge=object())
+        check_judge_task(run, "p", "x", judge=object())
+
+
+def test_check_judge_task_defaults_to_full_run_diff():
+    """When diff_to_evaluate is omitted, the run's full_diff is judged."""
+    run = _make_run()
+    run._files_changed_fn = lambda: {
+        "a.py": FileChange("a.py", FileDiff(added="", removed="", unified="DIFF-A")),
+        "b.py": FileChange("b.py", FileDiff(added="", removed="", unified="DIFF-B")),
+    }
+    judge = _StubJudge(0.9)
+    judge.evaluate = MagicMock(wraps=judge.evaluate)
+
+    check_judge_task(run, "p", min_score=0.0, judge=judge)
+
+    judged_content = judge.evaluate.call_args.args[0]
+    assert "DIFF-A" in judged_content
+    assert "DIFF-B" in judged_content
 
 
 # --- AgentRun.transcript ---
@@ -124,6 +139,24 @@ def test_diff_returns_empty_string_for_unknown_file():
     run = _make_run()
     run._files_changed_fn = lambda: {}
     assert run.diff("nonexistent.py") == ""
+
+
+# --- AgentRun.full_diff ---
+
+
+def test_full_diff_concatenates_every_changed_file():
+    run = _make_run()
+    run._files_changed_fn = lambda: {
+        "a.py": FileChange("a.py", FileDiff(added="", removed="", unified="DIFF-A")),
+        "b.py": FileChange("b.py", FileDiff(added="", removed="", unified="DIFF-B")),
+    }
+    assert run.full_diff == "DIFF-A\nDIFF-B"
+
+
+def test_full_diff_empty_when_no_files_changed():
+    run = _make_run()
+    run._files_changed_fn = lambda: {}
+    assert run.full_diff == ""
 
 
 # --- default_judge() env var wiring ---

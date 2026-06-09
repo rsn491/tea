@@ -5,22 +5,33 @@ For assertions that are hard to express deterministically, use `check_judge_task
 ```python
 from tea import check_judge_task
 
-# Judge a file diff
+# Judge the whole-run diff (every file the agent changed)
 check_judge_task(
     run,
-    diff=run.diff("calculator.py"),
-    prompt="Does this diff correctly implement minus without breaking existing tests? Score 0-1.",
+    "Does this diff correctly implement minus without breaking existing tests? Score 0-1.",
+    min_score=0.8,
+)
+
+# Narrow it to a single file's diff
+check_judge_task(
+    run,
+    "Does calculator.py correctly implement minus? Score 0-1.",
+    run.diff("calculator.py"),
     min_score=0.8,
 )
 
 # Judge the full agent transcript
 check_judge_task(
     run,
-    diff=run.transcript,
-    prompt="Did the agent act decisively without asking unnecessary clarifying questions? Score 0-1.",
+    "Did the agent act decisively without asking unnecessary clarifying questions? Score 0-1.",
+    run.transcript,
     min_score=0.6,
 )
 ```
+
+By default the judge grades `run.full_diff` — the unified diff of every file the
+agent changed. Pass a third argument (`diff_to_evaluate`) to score something
+narrower, such as a single file's diff or the transcript.
 
 `check_judge_task` returns the score as a float and raises `AssertionError` if it falls below `min_score`. The score and rationale appear in the test report.
 
@@ -60,5 +71,5 @@ Then pass it explicitly:
 ```python
 from tea import check_judge_task, external_judge
 
-check_judge_task(run, diff=..., prompt=..., judge=external_judge())
+check_judge_task(run, "scoring criteria", judge=external_judge())
 ```

@@ -61,6 +61,15 @@ class AgentRun:
         return change.diff.unified if change else ""
 
     @property
+    def full_diff(self) -> str:
+        """Unified diff across every file changed in the run, concatenated."""
+        return "\n".join(
+            change.diff.unified
+            for change in self.files_changed.values()
+            if change.diff.unified
+        )
+
+    @property
     def transcript(self) -> str:
         parts = []
         for step in self.steps:

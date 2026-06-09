@@ -24,24 +24,24 @@ def test_minus_implementation_quality():
 
     check_judge_task(
         run,
-        diff=run.diff("calculator.py"),
-        prompt=(
+        (
             "Does this diff correctly implement a subtraction operation "
             "without breaking the existing structure? "
             "Score 1.0 if the implementation is clean and complete, "
             "0.5 if it works but has style issues, "
             "0.0 if it is broken or missing."
         ),
+        run.diff("calculator.py"),
         min_score=0.7,
     )
 
     check_judge_task(
         run,
-        diff=run.transcript,
-        prompt=(
+        (
             "Did the agent make changes directly and confidently without "
             "unnecessary clarifying questions or excessive commentary? "
             "Score 1.0 for decisive execution, 0.0 for excessive hedging."
         ),
+        run.transcript,
         min_score=0.6,
     )

@@ -86,7 +86,7 @@ check_file_changed(run, "file.py")                  # a file was created or modi
 check_file_not_changed(run, "file.py")              # a file was left untouched
 check_diff_added(run, "file.py", "some_symbol")    # code was added to a file
 check_diff_removed(run, "file.py", "old_symbol")   # code was removed from a file
-check_judge_task(run, diff=run.diff("file.py"), prompt="scoring criteria")  # LLM-as-judge assertion
+check_judge_task(run, "scoring criteria")           # LLM-as-judge over the whole-run diff
 ```
 
 | Checker | Asserts that… | Returns |
@@ -100,7 +100,7 @@ check_judge_task(run, diff=run.diff("file.py"), prompt="scoring criteria")  # LL
 | `check_file_not_changed(run, file)` | `file` was left untouched | `bool` |
 | `check_diff_added(run, file, code)` | `code` appears in `file`'s added lines | `bool` |
 | `check_diff_removed(run, file, code)` | `code` appears in `file`'s removed lines | `bool` |
-| `check_judge_task(run, *, diff, prompt, min_score=0.5, judge=None)` | an LLM judge scores `diff` ≥ `min_score` | `float` (score) |
+| `check_judge_task(run, judge_prompt, diff_to_evaluate=None, min_score=0.5, judge=None)` | an LLM judge scores the diff (whole-run by default) ≥ `min_score` | `float` (score) |
 
 ## Agents
 

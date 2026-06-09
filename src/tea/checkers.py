@@ -173,18 +173,19 @@ def check_diff_removed(
 
 def check_judge_task(
     run: AgentRun,
-    *,
-    diff: str,
-    prompt: str,
+    judge_prompt: str,
+    diff_to_evaluate: str | None = None,
     min_score: float = 0.5,
     judge: object | None = None,
 ) -> float:
     """Score a diff with an LLM judge and assert it meets a threshold.
 
     Args:
-        run: The completed agent run (kept for a consistent checker signature).
-        diff: The diff text to evaluate, e.g. ``run.diff("file.py")``.
-        prompt: Scoring criteria handed to the judge.
+        run: The completed agent run to inspect.
+        judge_prompt: Scoring criteria handed to the judge.
+        diff_to_evaluate: The diff text to evaluate. Defaults to the run's
+            ``full_diff`` (every file changed) when omitted; pass an explicit
+            value to narrow it, e.g. ``run.diff("file.py")`` or ``run.transcript``.
         min_score: Minimum score (inclusive) required to pass. Defaults to 0.5.
         judge: A :class:`Judge` instance; falls back to ``default_judge()``.
 
@@ -194,12 +195,14 @@ def check_judge_task(
     Raises:
         TypeError: If ``judge`` is provided but is not a :class:`Judge`.
     """
+    if diff_to_evaluate is None:
+        diff_to_evaluate = run.full_diff
     if judge is None:
         judge = default_judge()
 
     if not isinstance(judge, Judge):
         raise TypeError(f"judge must be a Judge instance, got {type(judge)!r}")
-    result = judge.evaluate(diff, prompt)
+    result = judge.evaluate(diff_to_evaluate, judge_prompt)
     label = f"judge score {result.score:.2f} >= {min_score} | {result.rationale}"
     check(label, result.score >= min_score)
     return result.score
