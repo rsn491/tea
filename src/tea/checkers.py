@@ -64,7 +64,6 @@ def check_skill_not_used(
     return check(label, skill not in run.skills)
 
 
-
 def check_tool_used(run: AgentRun, tool: str, description: str | None = None) -> bool:
     """Assert that the agent invoked a given tool during the run.
 
