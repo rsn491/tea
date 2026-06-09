@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 
 from tea.agent.agent_run import StepType
@@ -23,13 +22,8 @@ _DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 
 
 def _default_harness() -> Harness:
-    extra_volumes: dict[str, str] = {}
-    host_claude_dir = os.path.expanduser("~/.claude")
-    if os.path.isdir(host_claude_dir):
-        extra_volumes[host_claude_dir] = "/home/node/.claude"
-
     return Harness(
-        ClaudeCode(model=_DEFAULT_MODEL, max_turns=1, extra_volumes=extra_volumes),
+        ClaudeCode(model=_DEFAULT_MODEL, max_turns=1),
         DockerExecutor(),
     )
 
