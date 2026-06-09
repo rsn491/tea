@@ -58,14 +58,40 @@ See [examples/demo_calculator/agent-tests](examples/demo_calculator/agent-tests)
 
 ## Assertions
 
-```python
-from tea import check, check_skill_used, check_diff_added, check_judge_task
+Every `check_*` helper takes the `run` as its first argument, accepts an
+optional `description` to override the generated label, and—inside a
+`TestRunner`—records pass/fail without halting the test (outside one it raises
+`AssertionError`).
 
-check("label", condition)                        # generic named assertion
-check_skill_used(run, "skill-name")              # verify a skill was invoked
-check_diff_added(run, "file.py", "some_symbol")  # verify code was added to a file
+```python
+from tea import (
+    check,
+    check_skill_used,
+    check_tool_used,
+    check_file_changed,
+    check_diff_added,
+    check_diff_removed,
+    check_judge_task,
+)
+
+check("label", condition)                          # generic named assertion
+check_skill_used(run, "skill-name")                # a skill was invoked
+check_tool_used(run, "Edit")                        # a tool was called
+check_file_changed(run, "file.py")                  # a file was created or modified
+check_diff_added(run, "file.py", "some_symbol")    # code was added to a file
+check_diff_removed(run, "file.py", "old_symbol")   # code was removed from a file
 check_judge_task(run, diff=run.diff("file.py"), prompt="scoring criteria")  # LLM-as-judge assertion
 ```
+
+| Checker | Asserts that… | Returns |
+|---|---|---|
+| `check(label, condition)` | `condition` is truthy | `bool` |
+| `check_skill_used(run, skill)` | the agent used `skill` | `bool` |
+| `check_tool_used(run, tool)` | the agent called `tool` | `bool` |
+| `check_file_changed(run, file)` | `file` was created or modified | `bool` |
+| `check_diff_added(run, file, code)` | `code` appears in `file`'s added lines | `bool` |
+| `check_diff_removed(run, file, code)` | `code` appears in `file`'s removed lines | `bool` |
+| `check_judge_task(run, *, diff, prompt, min_score=0.5, judge=None)` | an LLM judge scores `diff` ≥ `min_score` | `float` (score) |
 
 ## Agents
 

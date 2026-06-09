@@ -9,8 +9,11 @@ from tea.agent.pi import Pi, PiHarness
 from tea.checkers import (
     check,
     check_diff_added,
+    check_diff_removed,
+    check_file_changed,
     check_judge_task,
     check_skill_used,
+    check_tool_used,
 )
 from tea.executor import DockerSpec, ExecutionSpec, Executor, RawResult
 from tea.executor.docker_executor import DockerExecutor
@@ -46,8 +49,11 @@ __all__ = [
     "iterations",
     "check",
     "check_diff_added",
+    "check_diff_removed",
+    "check_file_changed",
     "check_judge_task",
     "check_skill_used",
+    "check_tool_used",
     "HarnessJudge",
     "Judge",
     "JudgeResult",

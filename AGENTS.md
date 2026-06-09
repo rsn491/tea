@@ -35,7 +35,7 @@ src/tea/
 ├── judge/          # Judge ABC, PydanticAIJudge adapter, JudgeResult
 ├── infra/          # docker-py wrapper
 ├── tui/            # terminal output
-├── checkers.py     # check(), check_skill_used(), check_diff_added(), check_judge_task()
+├── checkers.py     # check() + check_skill_used/tool_used/file_changed/diff_added/diff_removed/judge_task
 └── runner.py       # test discovery and execution
 
 tests/unit/         # no Docker, no API keys — always runnable
