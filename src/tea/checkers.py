@@ -171,27 +171,27 @@ def check_diff_removed(
 
 
 def _check_judge(
-    diff_to_evaluate: str,
+    output_to_evaluate: str,
     judge_prompt: str,
     min_score: float,
     judge: object | None,
 ) -> float:
-    """Run a judge over ``diff_to_evaluate`` and record the threshold check."""
+    """Run a judge over ``output_to_evaluate`` and record the threshold check."""
     if judge is None:
         judge = default_judge()
 
     if not isinstance(judge, Judge):
         raise TypeError(f"judge must be a Judge instance, got {type(judge)!r}")
-    result = judge.evaluate(diff_to_evaluate, judge_prompt)
+    result = judge.evaluate(output_to_evaluate, judge_prompt)
     label = f"judge score {result.score:.2f} >= {min_score} | {result.rationale}"
     check(label, result.score >= min_score)
     return result.score
 
 
-def check_judge_diff(
+def check_output_score(
     run: AgentRun,
     judge_prompt: str,
-    diff_to_evaluate: str,
+    output_to_evaluate: str,
     min_score: float = 0.5,
     judge: object | None = None,
 ) -> float:
@@ -200,7 +200,7 @@ def check_judge_diff(
     Args:
         run: The completed agent run to inspect.
         judge_prompt: Scoring criteria handed to the judge.
-        diff_to_evaluate: The diff text to evaluate, e.g. ``run.diff("file.py")``
+        output_to_evaluate: The diff text to evaluate, e.g. ``run.diff("file.py")``
             or ``run.transcript``.
         min_score: Minimum score (inclusive) required to pass. Defaults to 0.5.
         judge: A :class:`Judge` instance; falls back to ``default_judge()``.
@@ -211,10 +211,10 @@ def check_judge_diff(
     Raises:
         TypeError: If ``judge`` is provided but is not a :class:`Judge`.
     """
-    return _check_judge(diff_to_evaluate, judge_prompt, min_score, judge)
+    return _check_judge(output_to_evaluate, judge_prompt, min_score, judge)
 
 
-def check_judge_run(
+def check_run_score(
     run: AgentRun,
     judge_prompt: str,
     min_score: float = 0.5,

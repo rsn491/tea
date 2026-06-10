@@ -4,17 +4,17 @@ For assertions that are hard to express deterministically, use the judge
 checkers to grade the run with a language model:
 
 ```python
-from tea import check_judge_diff, check_judge_run
+from tea import check_output_score, check_run_score
 
 # Judge the whole-run diff (every file the agent changed)
-check_judge_run(
+check_run_score(
     run,
     "Does this diff correctly implement minus without breaking existing tests? Score 0-1.",
     min_score=0.8,
 )
 
 # Narrow it to a single file's diff
-check_judge_diff(
+check_output_score(
     run,
     "Does calculator.py correctly implement minus? Score 0-1.",
     run.diff("calculator.py"),
@@ -22,7 +22,7 @@ check_judge_diff(
 )
 
 # Judge the full agent transcript
-check_judge_diff(
+check_output_score(
     run,
     "Did the agent act decisively without asking unnecessary clarifying questions? Score 0-1.",
     run.transcript,
@@ -30,9 +30,9 @@ check_judge_diff(
 )
 ```
 
-`check_judge_run` grades `run.full_diff` — the unified diff of every file the
-agent changed. `check_judge_diff` grades whatever you pass as
-`diff_to_evaluate`, such as a single file's diff or the transcript.
+`check_run_score` grades `run.full_diff` — the unified diff of every file the
+agent changed. `check_output_score` grades whatever you pass as
+`output_to_evaluate`, such as a single file's diff or the transcript.
 
 Both return the score as a float and raise `AssertionError` if it falls below `min_score`. The score and rationale appear in the test report.
 
@@ -70,7 +70,7 @@ export TEA_JUDGE_MODEL="llama3.2"
 Then pass it explicitly:
 
 ```python
-from tea import check_judge_run, external_judge
+from tea import check_run_score, external_judge
 
-check_judge_run(run, "scoring criteria", judge=external_judge())
+check_run_score(run, "scoring criteria", judge=external_judge())
 ```

@@ -26,19 +26,33 @@ uv sync
 ### Write a test
 
 ```python
-from tea import Agents, check_diff_added, check_skill_used
+from tea import Agents, check_diff_added, check_skill_used, check_file_changed, check_output_score
+from tea.runner import iterations
 
+@iterations(3)
 def test_add_minus_operation():
     run = (
-        Agents.ClaudeCode
-        .prompt("Add 'minus' operation support to the calculator")
+        Agents.ClaudeCode.prompt("Add 'minus' operation support to the calculator")
         .workdir("examples/demo_calculator")
         .run()
     )
 
+    check_diff_added(run, "calculator.py", "def minus")
+    check_diff_added(run, "test_calculator.py", "def test_minus")
+    check_file_changed(run, "README.md")
     check_skill_used(run, "add-new-operation")
-    check_diff_added(run, "calculator.py", "minus")
-    check_diff_added(run, "test_calculator.py", "test_minus")
+    check_output_score(
+        run,
+        (
+            "Does this diff correctly implement a subtraction operation "
+            "without breaking the existing structure? "
+            "Score 1.0 if the implementation is clean and complete, "
+            "0.5 if it works but has style issues, "
+            "0.0 if it is broken or missing."
+        ),
+        run.diff("calculator.py"),
+        min_score=0.7,
+    )
 ```
 
 ### Run tests
@@ -58,24 +72,17 @@ See [examples/demo_calculator/agent-tests](examples/demo_calculator/agent-tests)
 
 ## Checkers
 
-Every `check_*` helper takes the `run` as its first argument, accepts an
-optional `description` to override the generated label, and—inside a
-`TestRunner`—records pass/fail without halting the test (outside one it raises
-`AssertionError`).
-
-| Checker | Asserts that… | Returns |
-|---|---|---|
-| `check(label, condition)` | `condition` is truthy | `bool` |
-| `check_skill_used(run, skill)` | the agent used `skill` | `bool` |
-| `check_skill_not_used(run, skill)` | the agent did not use `skill` | `bool` |
-| `check_tool_used(run, tool)` | the agent called `tool` | `bool` |
-| `check_tool_not_used(run, tool)` | the agent did not call `tool` | `bool` |
-| `check_file_changed(run, file)` | `file` was created or modified | `bool` |
-| `check_file_not_changed(run, file)` | `file` was left untouched | `bool` |
-| `check_diff_added(run, file, code)` | `code` appears in `file`'s added lines | `bool` |
-| `check_diff_removed(run, file, code)` | `code` appears in `file`'s removed lines | `bool` |
-| `check_judge_diff(run, judge_prompt, diff_to_evaluate, min_score=0.5, judge=None)` | an LLM judge scores `diff_to_evaluate` ≥ `min_score` | `float` (score) |
-| `check_judge_run(run, judge_prompt, min_score=0.5, judge=None)` | an LLM judge scores the whole-run diff ≥ `min_score` | `float` (score) |
+- `check(label, condition)` — checks that `condition` is truthy and returns `bool`
+- `check_skill_used(run, skill)` — checks that the agent used `skill` and returns `bool`
+- `check_skill_not_used(run, skill)` — checks that the agent did not use `skill` and returns `bool`
+- `check_tool_used(run, tool)` — checks that the agent called `tool` and returns `bool`
+- `check_tool_not_used(run, tool)` — checks that the agent did not call `tool` and returns `bool`
+- `check_file_changed(run, file)` — checks that `file` was created or modified and returns `bool`
+- `check_file_not_changed(run, file)` — checks that `file` was left untouched and returns `bool`
+- `check_diff_added(run, file, code)` — checks that `code` appears in `file`'s added lines and returns `bool`
+- `check_diff_removed(run, file, code)` — checks that `code` appears in `file`'s removed lines and returns `bool`
+- `check_output_score(run, judge_prompt, output_to_evaluate, min_score=0.5, judge=None)` — checks that the score assigned to the output using an LLM-as-a-Judge is higher than `min_score` and returns the score as `float`
+- `check_run_score(run, judge_prompt, min_score=0.5, judge=None)` — checks that the score assigned to the agent run using an LLM-as-a-Judge is higher than `min_score` and returns the score as `float`
 
 ## Agents
 

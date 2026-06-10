@@ -68,11 +68,11 @@ returns a `RawResult`; `Agent.parse()` turns that into an `AgentRun`.
 
 ### Judge
 
-A separate call path invoked only when `check_judge_diff()` / `check_judge_run()`
+A separate call path invoked only when `check_output_score()` / `check_run_score()`
 is used in a test:
 
 ```
-check_judge_diff() / check_judge_run()
+check_output_score() / check_run_score()
 └── Judge (ABC)          judge/judge.py
      └── PydanticAIJudge judge/pydantic_ai.py — calls an LLM via pydantic-ai, validates score with Pydantic
 ```

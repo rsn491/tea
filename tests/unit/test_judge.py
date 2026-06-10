@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from tea.agent.agent_run import AgentRun, FileChange, FileDiff, Step, StepType
-from tea.checkers import check_judge_diff, check_judge_run
+from tea.checkers import check_output_score, check_run_score
 from tea.judge import HarnessJudge, Judge, JudgeResult
 from tea.judge.harness_judge import _parse, default_judge
 from tea.judge.pydantic_ai import external_judge
@@ -43,57 +43,57 @@ def test_stub_judge_satisfies_seam():
     assert result.score == 0.7
 
 
-# --- check_judge_diff ---
+# --- check_output_score ---
 
 
-def test_check_judge_diff_passes_when_score_meets_threshold():
+def test_check_output_score_passes_when_score_meets_threshold():
     run = _make_run()
-    score = check_judge_diff(
+    score = check_output_score(
         run, "p", "diff text", min_score=0.8, judge=_StubJudge(0.9)
     )
     assert score == 0.9
 
 
-def test_check_judge_diff_passes_at_exact_threshold():
+def test_check_output_score_passes_at_exact_threshold():
     run = _make_run()
-    score = check_judge_diff(
+    score = check_output_score(
         run, "p", "diff text", min_score=0.5, judge=_StubJudge(0.5)
     )
     assert score == 0.5
 
 
-def test_check_judge_diff_raises_when_score_below_threshold():
+def test_check_output_score_raises_when_score_below_threshold():
     run = _make_run()
     with pytest.raises(AssertionError):
-        check_judge_diff(run, "p", "diff text", min_score=0.8, judge=_StubJudge(0.4))
+        check_output_score(run, "p", "diff text", min_score=0.8, judge=_StubJudge(0.4))
 
 
-def test_check_judge_diff_returns_float():
+def test_check_output_score_returns_float():
     run = _make_run()
-    result = check_judge_diff(run, "p", "x", min_score=0.0, judge=_StubJudge(0.6))
+    result = check_output_score(run, "p", "x", min_score=0.0, judge=_StubJudge(0.6))
     assert isinstance(result, float)
 
 
-def test_check_judge_diff_raises_type_error_for_non_judge():
+def test_check_output_score_raises_type_error_for_non_judge():
     run = _make_run()
     with pytest.raises(TypeError, match="Judge instance"):
-        check_judge_diff(run, "p", "x", judge=object())
+        check_output_score(run, "p", "x", judge=object())
 
 
-def test_check_judge_diff_evaluates_given_diff():
+def test_check_output_score_evaluates_given_diff():
     run = _make_run()
     judge = _StubJudge(0.9)
     judge.evaluate = MagicMock(wraps=judge.evaluate)
 
-    check_judge_diff(run, "p", "EXPLICIT-DIFF", min_score=0.0, judge=judge)
+    check_output_score(run, "p", "EXPLICIT-DIFF", min_score=0.0, judge=judge)
 
     assert judge.evaluate.call_args.args[0] == "EXPLICIT-DIFF"
 
 
-# --- check_judge_run ---
+# --- check_run_score ---
 
 
-def test_check_judge_run_evaluates_full_run_diff():
+def test_check_run_score_evaluates_full_run_diff():
     run = _make_run()
     run._files_changed_fn = lambda: {
         "a.py": FileChange("a.py", FileDiff(added="", removed="", unified="DIFF-A")),
@@ -102,18 +102,18 @@ def test_check_judge_run_evaluates_full_run_diff():
     judge = _StubJudge(0.9)
     judge.evaluate = MagicMock(wraps=judge.evaluate)
 
-    check_judge_run(run, "p", min_score=0.0, judge=judge)
+    check_run_score(run, "p", min_score=0.0, judge=judge)
 
     judged_content = judge.evaluate.call_args.args[0]
     assert "DIFF-A" in judged_content
     assert "DIFF-B" in judged_content
 
 
-def test_check_judge_run_raises_type_error_for_non_judge():
+def test_check_run_score_raises_type_error_for_non_judge():
     run = _make_run()
     run._files_changed_fn = lambda: {}
     with pytest.raises(TypeError, match="Judge instance"):
-        check_judge_run(run, "p", judge=object())
+        check_run_score(run, "p", judge=object())
 
 
 # --- AgentRun.transcript ---
