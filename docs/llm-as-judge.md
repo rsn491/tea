@@ -15,17 +15,15 @@ check_run_score(
 
 # Narrow it to a single file's diff
 check_output_score(
-    run,
-    "Does calculator.py correctly implement minus? Score 0-1.",
     run.diff("calculator.py"),
+    "Does calculator.py correctly implement minus? Score 0-1.",
     min_score=0.8,
 )
 
 # Judge the full agent transcript
 check_output_score(
-    run,
-    "Did the agent act decisively without asking unnecessary clarifying questions? Score 0-1.",
     run.transcript,
+    "Did the agent act decisively without asking unnecessary clarifying questions? Score 0-1.",
     min_score=0.6,
 )
 ```

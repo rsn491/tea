@@ -4,11 +4,6 @@ from tea._context import _active_checks
 from tea.agent.agent_run import AgentRun
 from tea.judge import Judge, default_judge
 
-# Every ``check_*`` helper follows the same shape:
-#   - takes the completed ``AgentRun`` as its first positional argument,
-#   - accepts an optional ``description`` to override the generated label,
-#   - delegates the pass/fail bookkeeping to ``check()`` and returns its result.
-
 
 def check(label: str, condition: bool) -> bool:
     """Record a named assertion.
@@ -174,14 +169,11 @@ def _check_judge(
     output_to_evaluate: str,
     judge_prompt: str,
     min_score: float,
-    judge: object | None,
+    judge: Judge | None,
 ) -> float:
     """Run a judge over ``output_to_evaluate`` and record the threshold check."""
     if judge is None:
         judge = default_judge()
-
-    if not isinstance(judge, Judge):
-        raise TypeError(f"judge must be a Judge instance, got {type(judge)!r}")
     result = judge.evaluate(output_to_evaluate, judge_prompt)
     label = f"judge score {result.score:.2f} >= {min_score} | {result.rationale}"
     check(label, result.score >= min_score)
@@ -189,19 +181,17 @@ def _check_judge(
 
 
 def check_output_score(
-    run: AgentRun,
-    judge_prompt: str,
     output_to_evaluate: str,
+    judge_prompt: str,
     min_score: float = 0.5,
-    judge: object | None = None,
+    judge: Judge | None = None,
 ) -> float:
-    """Score a specific diff with an LLM judge and assert it meets a threshold.
+    """Score a specific output with an LLM judge and assert it meets a threshold.
 
     Args:
-        run: The completed agent run to inspect.
-        judge_prompt: Scoring criteria handed to the judge.
-        output_to_evaluate: The diff text to evaluate, e.g. ``run.diff("file.py")``
+        output_to_evaluate: The text to evaluate, e.g. ``run.diff("file.py")``
             or ``run.transcript``.
+        judge_prompt: Scoring criteria handed to the judge.
         min_score: Minimum score (inclusive) required to pass. Defaults to 0.5.
         judge: A :class:`Judge` instance; falls back to ``default_judge()``.
 
@@ -218,7 +208,7 @@ def check_run_score(
     run: AgentRun,
     judge_prompt: str,
     min_score: float = 0.5,
-    judge: object | None = None,
+    judge: Judge | None = None,
 ) -> float:
     """Score the whole-run diff with an LLM judge and assert it meets a threshold.
 

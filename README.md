@@ -26,7 +26,7 @@ uv sync
 ### Write a test
 
 ```python
-from tea import Agents, check_diff_added, check_skill_used, check_file_changed, check_output_score
+from tea import Agents, check_diff_added, check_skill_used, check_file_changed, check_run_score
 from tea.runner import iterations
 
 @iterations(3)
@@ -37,11 +37,11 @@ def test_add_minus_operation():
         .run()
     )
 
+    check_skill_used(run, "add-new-operation")
     check_diff_added(run, "calculator.py", "def minus")
     check_diff_added(run, "test_calculator.py", "def test_minus")
     check_file_changed(run, "README.md")
-    check_skill_used(run, "add-new-operation")
-    check_output_score(
+    check_run_score(
         run,
         (
             "Does this diff correctly implement a subtraction operation "
@@ -50,7 +50,6 @@ def test_add_minus_operation():
             "0.5 if it works but has style issues, "
             "0.0 if it is broken or missing."
         ),
-        run.diff("calculator.py"),
         min_score=0.7,
     )
 ```
@@ -81,7 +80,7 @@ See [examples/demo_calculator/agent-tests](examples/demo_calculator/agent-tests)
 - `check_file_not_changed(run, file)` — checks that `file` was left untouched and returns `bool`
 - `check_diff_added(run, file, code)` — checks that `code` appears in `file`'s added lines and returns `bool`
 - `check_diff_removed(run, file, code)` — checks that `code` appears in `file`'s removed lines and returns `bool`
-- `check_output_score(run, judge_prompt, output_to_evaluate, min_score=0.5, judge=None)` — checks that the score assigned to the output using an LLM-as-a-Judge is higher than `min_score` and returns the score as `float`
+- `check_output_score(output_to_evaluate, judge_prompt, min_score=0.5, judge=None)` — checks that the score assigned to the output using an LLM-as-a-Judge is higher than `min_score` and returns the score as `float`
 - `check_run_score(run, judge_prompt, min_score=0.5, judge=None)` — checks that the score assigned to the agent run using an LLM-as-a-Judge is higher than `min_score` and returns the score as `float`
 
 ## Agents

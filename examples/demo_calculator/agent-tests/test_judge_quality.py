@@ -23,7 +23,7 @@ def test_minus_implementation_quality():
     )
 
     check_output_score(
-        run,
+        run.diff("calculator.py"),
         (
             "Does this diff correctly implement a subtraction operation "
             "without breaking the existing structure? "
@@ -31,17 +31,15 @@ def test_minus_implementation_quality():
             "0.5 if it works but has style issues, "
             "0.0 if it is broken or missing."
         ),
-        run.diff("calculator.py"),
         min_score=0.7,
     )
 
     check_output_score(
-        run,
+        run.transcript,
         (
             "Did the agent make changes directly and confidently without "
             "unnecessary clarifying questions or excessive commentary? "
             "Score 1.0 for decisive execution, 0.0 for excessive hedging."
         ),
-        run.transcript,
         min_score=0.6,
     )

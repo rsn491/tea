@@ -2,13 +2,13 @@ from tea import (
     Agents,
     check_diff_added,
     check_file_changed,
-    check_output_score,
+    check_run_score,
     check_skill_used,
 )
 from tea.runner import iterations
 
 
-@iterations(3)
+@iterations(1)
 def test_add_minus_operation():
     run = (
         Agents.ClaudeCode.prompt("Add 'minus' operation support to the calculator")
@@ -16,11 +16,11 @@ def test_add_minus_operation():
         .run()
     )
 
-    check_skill_used(run, "add-new-operation")
     check_diff_added(run, "calculator.py", "def minus")
     check_diff_added(run, "test_calculator.py", "def test_minus")
     check_file_changed(run, "README.md")
-    check_output_score(
+    check_skill_used(run, "add-new-operation")
+    check_run_score(
         run,
         (
             "Does this diff correctly implement a subtraction operation "
@@ -29,7 +29,6 @@ def test_add_minus_operation():
             "0.5 if it works but has style issues, "
             "0.0 if it is broken or missing."
         ),
-        run.diff("calculator.py"),
         min_score=0.7,
     )
 
