@@ -9,7 +9,7 @@ from dataclasses import replace
 from tea.executor import DockerSpec, RawResult
 from tea.executor.docker_executor import DockerExecutor
 
-from ._utils import _sanitize_env_value
+from ._utils import _esc
 from ._version import resolve_cli_version
 from .agent import Agent
 from .agent_run import AgentRun, Step, StepType, ToolCall
@@ -59,15 +59,13 @@ class Codex(Agent):
         version = self.version()
         image = f"tea-codex:{version}"
 
-        env["CODEX_PROMPT"] = _sanitize_env_value(prompt)
-
         return DockerSpec(
             command=(
                 f"{npm_prefix}/bin/codex exec --json"
                 f" --dangerously-bypass-approvals-and-sandbox"
                 f" --skip-git-repo-check --ephemeral"
                 f" -m {shlex.quote(self._model)}"
-                ' "$CODEX_PROMPT"'
+                f' "{_esc(prompt)}"'
             ),
             setup_command=setup_command,
             dockerfile=self._dockerfile(version),
