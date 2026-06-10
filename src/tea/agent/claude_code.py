@@ -8,7 +8,7 @@ from dataclasses import replace
 from tea.executor import DockerSpec, RawResult
 from tea.executor.docker_executor import DockerExecutor
 
-from ._utils import _esc
+from ._utils import _sanitize_env_value
 from ._version import resolve_cli_version
 from .agent import Agent
 from .agent_run import AgentRun, Step, StepType, ToolCall
@@ -69,12 +69,14 @@ class ClaudeCode(Agent):
         version = self.version()
         image = f"tea-claude-code:{version}"
 
+        env["CLAUDE_PROMPT"] = _sanitize_env_value(prompt)
+
         return DockerSpec(
             command=(
                 f"{npm_prefix}/bin/claude --dangerously-skip-permissions"
                 f" --model {shlex.quote(self._model)}"
                 f" --max-turns {int(self._max_turns)}"
-                f' --print --output-format stream-json --verbose "{_esc(prompt)}"'
+                ' --print --output-format stream-json --verbose "$CLAUDE_PROMPT"'
             ),
             dockerfile=self._dockerfile(version),
             env=env,

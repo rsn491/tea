@@ -6,7 +6,7 @@ import os
 from tea.executor import DockerSpec, RawResult
 from tea.executor.docker_executor import DockerExecutor
 
-from ._utils import _esc
+from ._utils import _sanitize_env_value
 from ._version import resolve_cli_version
 from .agent import Agent
 from .agent_run import AgentRun, Step, StepType, ToolCall
@@ -55,11 +55,13 @@ class Pi(Agent):
         version = self.version()
         image = f"tea-pi:{version}"
 
+        env["PI_PROMPT"] = _sanitize_env_value(prompt)
+
         return DockerSpec(
             command=(
                 f"{npm_prefix}/bin/pi --mode json --no-extensions"
                 f" --model {self._model_config.model}"
-                f' "{_esc(prompt)}"'
+                ' "$PI_PROMPT"'
             ),
             setup_command=setup_command,
             dockerfile=self._dockerfile(version),
