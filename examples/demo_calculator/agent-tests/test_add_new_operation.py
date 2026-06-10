@@ -4,11 +4,11 @@ from tea import (
     check_file_changed,
     check_run_score,
     check_skill_used,
+    iterations,
 )
-from tea.runner import iterations
 
 
-@iterations(1)
+@iterations(2)
 def test_add_minus_operation():
     run = (
         Agents.ClaudeCode.prompt("Add 'minus' operation support to the calculator")

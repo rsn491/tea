@@ -26,10 +26,17 @@ uv sync
 ### Write a test
 
 ```python
-from tea import Agents, check_diff_added, check_skill_used, check_file_changed, check_run_score
-from tea.runner import iterations
+from tea import (
+    Agents,
+    check_diff_added,
+    check_file_changed,
+    check_run_score,
+    check_skill_used,
+    iterations,
+)
 
-@iterations(3)
+
+@iterations(2)
 def test_add_minus_operation():
     run = (
         Agents.ClaudeCode.prompt("Add 'minus' operation support to the calculator")
@@ -37,10 +44,10 @@ def test_add_minus_operation():
         .run()
     )
 
-    check_skill_used(run, "add-new-operation")
     check_diff_added(run, "calculator.py", "def minus")
     check_diff_added(run, "test_calculator.py", "def test_minus")
     check_file_changed(run, "README.md")
+    check_skill_used(run, "add-new-operation")
     check_run_score(
         run,
         (
