@@ -7,18 +7,27 @@ _NO_SPINNER = os.environ.get("NO_SPINNER") is not None
 
 
 class Theme(abc.ABC):
-    @classmethod
-    @abc.abstractmethod
-    def primary(cls, t: str) -> str: ...
+    """Abstract base class for tea color themes.
+
+    Subclass and implement all four classmethods to define a custom palette.
+    """
 
     @classmethod
     @abc.abstractmethod
-    def primary_light(cls, t: str) -> str: ...
+    def primary(cls, t: str) -> str:
+        """Main accent color — spinners, test names, and decorative elements."""
 
     @classmethod
     @abc.abstractmethod
-    def success(cls, t: str) -> str: ...
+    def primary_light(cls, t: str) -> str:
+        """Lighter accent — used for bold highlights such as the banner title."""
 
     @classmethod
     @abc.abstractmethod
-    def error(cls, t: str) -> str: ...
+    def success(cls, t: str) -> str:
+        """Success state color — used for pass indicators and positive outcomes."""
+
+    @classmethod
+    @abc.abstractmethod
+    def error(cls, t: str) -> str:
+        """Error state color — used for failure indicators and alerts."""
