@@ -4,11 +4,12 @@ import statistics
 from typing import Callable
 
 from tea.agent.agent_run import AgentRun
-from tea.tui import _FAIL, _PASS, _bold_cyan, _c, _dim, _green, _red, _row
+from tea.tui import _FAIL, _PASS, _row
+from tea.tui.theme import bold_primary, dim, error, success, warning
 
 
 def print_test_header(name: str, iterations: int) -> None:
-    print(f"\n  {_bold_cyan(name)}  {_dim(f'[{iterations} iteration(s)]')}\n")
+    print(f"\n  {bold_primary(name)}  {dim(f'[{iterations} iteration(s)]')}\n")
 
 
 def print_test_results(
@@ -24,13 +25,13 @@ def print_test_results(
         total = len(results)
         pct = 100.0 * passes / total if total else 0.0
         sym = _PASS if passes == total else _FAIL
-        pct_str = _green(f"{pct:.0f}%") if passes == total else _c("33", f"{pct:.0f}%")
+        pct_str = success(f"{pct:.0f}%") if passes == total else warning(f"{pct:.0f}%")
         print(
             _row(
                 sym,
                 check_label,
-                f"{pct_str}  {_green(str(passes))} passed"
-                f"  {_red(str(total - passes))} failed",
+                f"{pct_str}  {success(str(passes))} passed"
+                f"  {error(str(total - passes))} failed",
             )
         )
 
@@ -39,7 +40,7 @@ def print_test_results(
         def _avg_row(
             metric: str, values: list[float], fmt: Callable[[float], str]
         ) -> str:
-            return _row(" ", _dim(metric), _dim(f"avg={fmt(statistics.mean(values))}"))
+            return _row(" ", dim(metric), dim(f"avg={fmt(statistics.mean(values))}"))
 
         print(
             _avg_row(
@@ -61,7 +62,7 @@ def print_test_results(
             )
         )
 
-    print(_row(" ", _dim("iterations"), _dim(str(iterations))))
+    print(_row(" ", dim("iterations"), dim(str(iterations))))
 
     if max_failures:
         sym = _PASS if failed_iterations <= max_failures else _FAIL
@@ -77,12 +78,12 @@ def print_test_results(
     if run_errors:
         print(
             f"\n  {_FAIL} "
-            + _red(f"{len(run_errors)} iteration(s) raised an exception:")
+            + error(f"{len(run_errors)} iteration(s) raised an exception:")
         )
         seen: set[str] = set()
         for e in run_errors:
             msg = f"{type(e).__name__}: {e}"
             if msg not in seen:
                 seen.add(msg)
-                print(f"    {_red(msg)}")
+                print(f"    {error(msg)}")
     print()
