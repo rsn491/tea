@@ -6,16 +6,8 @@ from .default_theme import DefaultTheme
 # ── primary helpers ────────────────────────────────────────────────────────────
 
 
-def primary_dark(t: str) -> str:
-    return bold(DefaultTheme.primary(t))
-
-
 def primary(t: str) -> str:
     return DefaultTheme.primary(t)
-
-
-def primary_light(t: str) -> str:
-    return DefaultTheme.primary_light(t)
 
 
 def bold_primary(t: str) -> str:
