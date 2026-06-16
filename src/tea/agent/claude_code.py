@@ -58,12 +58,6 @@ class ClaudeCode(Agent):
             env["CLAUDE_CODE_OAUTH_TOKEN"] = token
 
         extra_volumes: dict[str, str] = {}
-        # Mount only OAuth credentials from the host ~/.claude — not the whole
-        # directory, which would leak the developer's personal skills, agents,
-        # and settings into the test container.
-        host_creds = os.path.expanduser("~/.claude/.credentials.json")
-        if os.path.isfile(host_creds):
-            extra_volumes[host_creds] = "/home/node/.claude/.credentials.json"
         extra_volumes.update(self._extra_volumes)
 
         version = self.version()

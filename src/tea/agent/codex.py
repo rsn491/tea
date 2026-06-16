@@ -13,23 +13,15 @@ from ._utils import _esc
 from ._version import resolve_cli_version
 from .agent import Agent
 from .agent_run import AgentRun, Step, StepType, ToolCall
-from .harness import ApiKeyHarness, Harness, SubscriptionHarness
+from .harness import ApiKeyHarness, Harness
 
 _NODE_VERSION = "22"
 _CODEX_PACKAGE = "@openai/codex"
 _CODEX_VERSION_ENV = "CODEX_VERSION"
 _DEFAULT_MODEL = "gpt-5.2-codex"
-# gpt-5.2-codex is rejected under ChatGPT-account (subscription) auth, so OAuth
-# runs default to a subscription-compatible model instead.
-_DEFAULT_SUBSCRIPTION_MODEL = "gpt-5.3-codex"
-# Env var carrying the contents of ~/.codex/auth.json for subscription auth.
-_CODEX_AUTH_ENV = "CODEX_AUTH_JSON"
 
 # DockerExecutor mounts the workdir at this path; install_skills relies on it.
 _CONTAINER_WORKDIR = "/workspace"
-# Codex reads auth + skills from CODEX_HOME (defaults to ~/.codex). HOME is set
-# to /home/node in the container, so ~/.codex resolves here.
-_CODEX_HOME = "/home/node/.codex"
 
 
 class Codex(Agent):
@@ -45,16 +37,9 @@ class Codex(Agent):
     def build_spec(self, prompt: str, timeout: int) -> DockerSpec:
         npm_prefix = "/home/node/.npm-global"
         env: dict[str, str] = {"HOME": "/home/node", "NPM_CONFIG_PREFIX": npm_prefix}
-        setup_command: str | None = None
         # API-key auth: forward OPENAI_API_KEY (recommended for programmatic use).
         if api_key := os.environ.get("OPENAI_API_KEY"):
             env["OPENAI_API_KEY"] = api_key
-        # Subscription (ChatGPT OAuth) auth: codex reads credentials from
-        # $CODEX_HOME/auth.json. Instead of bind-mounting the host file, take the
-        # credential JSON from an env var and write it inside the container at
-        # start-up — keeps auth env-var-driven with no host path leaking in.
-        if auth_json := os.environ.get(_CODEX_AUTH_ENV):
-            setup_command = _auth_setup(auth_json)
 
         version = self.version()
         image = f"tea-codex:{version}"
@@ -67,7 +52,6 @@ class Codex(Agent):
                 f" -m {shlex.quote(self._model)}"
                 f' "{_esc(prompt)}"'
             ),
-            setup_command=setup_command,
             dockerfile=self._dockerfile(version),
             env=env,
             image=image,
@@ -116,7 +100,7 @@ class Codex(Agent):
         return run
 
 
-class CodexHarness(ApiKeyHarness, SubscriptionHarness):
+class CodexHarness(ApiKeyHarness):
     def with_api_key(self) -> Harness:
         agent = self._agent
         model = agent.model if isinstance(agent, Codex) else _DEFAULT_MODEL
@@ -125,41 +109,6 @@ class CodexHarness(ApiKeyHarness, SubscriptionHarness):
             DockerExecutor(),
             skills_sources=self.skills_sources,
         )
-
-    def with_subscription(self) -> Harness:
-        """Harness for ChatGPT-subscription (OAuth) auth.
-
-        Credentials are supplied via the ``CODEX_AUTH_JSON`` env var (the contents
-        of the host ``~/.codex/auth.json``); ``build_spec`` writes them into the
-        container at start-up — no host file is mounted, mirroring how API-key
-        auth forwards ``OPENAI_API_KEY``. Defaults to a subscription-compatible
-        model because the API-key default (gpt-5.2-codex) is rejected under
-        ChatGPT-account auth; an explicitly configured model is preserved.
-        """
-        agent = self._agent
-        model = (
-            agent.model
-            if isinstance(agent, Codex) and agent.model != _DEFAULT_MODEL
-            else _DEFAULT_SUBSCRIPTION_MODEL
-        )
-        return Harness(
-            Codex(model=model),
-            DockerExecutor(),
-            skills_sources=self.skills_sources,
-        )
-
-
-def _auth_setup(auth_json: str) -> str:
-    """Write subscription OAuth credentials into the container's CODEX_HOME.
-
-    Mirrors Pi's models.json materialisation: the credential JSON arrives via an
-    env var and is written to ``$CODEX_HOME/auth.json`` at start-up, so no host
-    file is bind-mounted. Single quotes in the payload are escaped for the shell.
-    """
-    escaped = auth_json.replace("'", "'\\''")
-    return (
-        f"mkdir -p {_CODEX_HOME} && printf '%s' '{escaped}' > {_CODEX_HOME}/auth.json"
-    )
 
 
 def _skill_setup(skills: list[str], source_for: dict[str, str]) -> str:
