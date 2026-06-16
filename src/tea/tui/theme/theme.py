@@ -31,3 +31,8 @@ class Theme(abc.ABC):
     @abc.abstractmethod
     def error(cls, t: str) -> str:
         """Error state color — used for failure indicators and alerts."""
+
+    @classmethod
+    @abc.abstractmethod
+    def warning(cls, t: str) -> str:
+        """Warning state color — used for partial results and cautions."""

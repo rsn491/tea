@@ -1,33 +1,33 @@
 from __future__ import annotations
 
-from ..utils import _c, bold
-from .default_theme import DefaultTheme
+from ..utils import bold
+from .active import active_theme
 
 # ── primary helpers ────────────────────────────────────────────────────────────
 
 
 def primary(t: str) -> str:
-    return DefaultTheme.primary(t)
+    return active_theme().primary(t)
 
 
 def bold_primary(t: str) -> str:
-    return bold(DefaultTheme.primary(t))
+    return bold(active_theme().primary(t))
 
 
 def bold_primary_light(t: str) -> str:
-    return bold(DefaultTheme.primary_light(t))
+    return bold(active_theme().primary_light(t))
 
 
 # ── utility ────────────────────────────────────────────────────────────────────
 
 
 def success(t: str) -> str:
-    return DefaultTheme.success(t)
+    return active_theme().success(t)
 
 
 def error(t: str) -> str:
-    return DefaultTheme.error(t)
+    return active_theme().error(t)
 
 
 def warning(t: str) -> str:
-    return _c("33", t)
+    return active_theme().warning(t)

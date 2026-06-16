@@ -18,8 +18,14 @@ def _vlen(s: str) -> int:
 # ── row / pass-fail ────────────────────────────────────────────────────────────
 
 _COL = 36
-_PASS = success("✓")
-_FAIL = error("✗")
+
+
+def _pass() -> str:
+    return success("✓")
+
+
+def _fail() -> str:
+    return error("✗")
 
 
 def _row(symbol: str, name: str, value: str) -> str:

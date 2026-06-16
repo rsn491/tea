@@ -6,6 +6,7 @@ from collections.abc import Sequence
 
 from tea.runner import run
 from tea.tui import print_banner
+from tea.tui.theme import set_mode
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -42,6 +43,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="compare this run against a stored baseline and report regressions "
         "(warn-only; does not affect exit code)",
     )
+    parser.add_argument(
+        "--theme",
+        choices=("dark", "light"),
+        default=None,
+        help="color theme for a dark or light terminal "
+        "(default: dark; also via TEA_THEME)",
+    )
     return parser
 
 
@@ -53,6 +61,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.print_help()
         return 0
 
+    set_mode(args.theme)
     print_banner()
     try:
         ok = run(

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from tea.baseline import Regression
-from tea.tui import _PASS, _row
+from tea.tui import _pass, _row
 from tea.tui.theme import bold_primary, dim, error, warning
 
 
@@ -14,7 +14,7 @@ class BaselineComparisonView:
     def render(self) -> None:
         print(f"\n  {bold_primary('baseline comparison')}\n")
         if not self._regressions:
-            print(_row(_PASS, dim("metrics"), dim("in line with baseline")))
+            print(_row(_pass(), dim("metrics"), dim("in line with baseline")))
             print()
             return
 

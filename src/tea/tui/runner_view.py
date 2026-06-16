@@ -4,7 +4,7 @@ import statistics
 from typing import Callable
 
 from tea.agent.agent_run import AgentRun
-from tea.tui import _FAIL, _PASS, _row
+from tea.tui import _fail, _pass, _row
 from tea.tui.theme import bold_primary, dim, error, success, warning
 
 
@@ -24,7 +24,7 @@ def print_test_results(
         passes = sum(results)
         total = len(results)
         pct = 100.0 * passes / total if total else 0.0
-        sym = _PASS if passes == total else _FAIL
+        sym = _pass() if passes == total else _fail()
         pct_str = success(f"{pct:.0f}%") if passes == total else warning(f"{pct:.0f}%")
         print(
             _row(
@@ -65,7 +65,7 @@ def print_test_results(
     print(_row(" ", dim("iterations"), dim(str(iterations))))
 
     if max_failures:
-        sym = _PASS if failed_iterations <= max_failures else _FAIL
+        sym = _pass() if failed_iterations <= max_failures else _fail()
         print(
             _row(
                 sym,
@@ -77,7 +77,7 @@ def print_test_results(
 
     if run_errors:
         print(
-            f"\n  {_FAIL} "
+            f"\n  {_fail()} "
             + error(f"{len(run_errors)} iteration(s) raised an exception:")
         )
         seen: set[str] = set()
