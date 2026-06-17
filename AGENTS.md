@@ -35,7 +35,7 @@ src/tea/
 ├── judge/          # Judge ABC, PydanticAIJudge adapter, JudgeResult
 ├── infra/          # docker-py wrapper
 ├── tui/            # terminal output
-├── checkers.py     # check(), check_skill_used(), check_diff_added(), check_judge_task()
+├── checkers.py     # check() + skill/tool/file used·not_used·changed, diff_added/removed, judge_diff/run
 └── runner.py       # test discovery and execution
 
 tests/unit/         # no Docker, no API keys — always runnable
@@ -68,10 +68,11 @@ returns a `RawResult`; `Agent.parse()` turns that into an `AgentRun`.
 
 ### Judge
 
-A separate call path invoked only when `check_judge_task()` is used in a test:
+A separate call path invoked only when `check_output_score()` / `check_run_score()`
+is used in a test:
 
 ```
-check_judge_task()
+check_output_score() / check_run_score()
 └── Judge (ABC)          judge/judge.py
      └── PydanticAIJudge judge/pydantic_ai.py — calls an LLM via pydantic-ai, validates score with Pydantic
 ```
@@ -84,9 +85,9 @@ means implementing a new `Judge` adapter — no changes to callers.
 
 - **New agent** (e.g. Codex, Gemini CLI): implement `Agent` ABC, add to `agent/__init__.py`
 - **New executor** (e.g. subprocess, k8s): implement `Executor` ABC
-- **New judge backend**: implement `Judge` ABC, wire it up via `default_judge()` or pass directly as `judge=` to `check_judge_task()`
+- **New judge backend**: implement `Judge` ABC, wire it up via `default_judge()` or pass directly as `judge=` to the judge checkers
 
-Callers (`Harness`, `check_judge_task`) depend only on the ABCs, never on concrete adapters.
+Callers (`Harness`, the judge checkers) depend only on the ABCs, never on concrete adapters.
 
 ## Environment variables
 

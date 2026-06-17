@@ -1,34 +1,44 @@
 # LLM-as-judge
 
-For assertions that are hard to express deterministically, use `check_judge_task` to grade the run with a language model:
+For assertions that are hard to express deterministically, use the judge
+checkers to grade the run with a language model:
 
 ```python
-from tea import check_judge_task
+from tea import check_output_score, check_run_score
 
-# Judge a file diff
-check_judge_task(
+# Judge the whole-run diff (every file the agent changed)
+check_run_score(
     run,
-    diff=run.diff("calculator.py"),
-    prompt="Does this diff correctly implement minus without breaking existing tests? Score 0-1.",
+    "Does this diff correctly implement minus without breaking existing tests? Score 0-1.",
+    min_score=0.8,
+)
+
+# Narrow it to a single file's diff
+check_output_score(
+    run.diff("calculator.py"),
+    "Does calculator.py correctly implement minus? Score 0-1.",
     min_score=0.8,
 )
 
 # Judge the full agent transcript
-check_judge_task(
-    run,
-    diff=run.transcript,
-    prompt="Did the agent act decisively without asking unnecessary clarifying questions? Score 0-1.",
+check_output_score(
+    run.transcript,
+    "Did the agent act decisively without asking unnecessary clarifying questions? Score 0-1.",
     min_score=0.6,
 )
 ```
 
-`check_judge_task` returns the score as a float and raises `AssertionError` if it falls below `min_score`. The score and rationale appear in the test report.
+`check_run_score` grades `run.full_diff` — the unified diff of every file the
+agent changed. `check_output_score` grades whatever you pass as
+`output_to_evaluate`, such as a single file's diff or the transcript.
+
+Both return the score as a float and raise `AssertionError` if it falls below `min_score`. The score and rationale appear in the test report.
 
 The judge is **separate from the harness** — the agent that runs your task (ClaudeCode inside Docker) and the model that grades the result are independently configured. You can use a cheap local model as judge while running an expensive agent, or swap the judge without touching your agent setup.
 
 ## Configuring the judge
 
-No extra configuration is needed. By default `check_judge_task` uses the same ClaudeCode harness (Docker + `claude-haiku`) that runs the main agent, so whatever auth you already have set up just works.
+No extra configuration is needed. By default the judge checkers use the same ClaudeCode harness (Docker + `claude-haiku`) that runs the main agent, so whatever auth you already have set up just works.
 
 The tradeoff is an extra Docker call per judge invocation. To use a standalone external model instead, use `external_judge()` and set the env vars below. All three are required together:
 
@@ -58,7 +68,7 @@ export TEA_JUDGE_MODEL="llama3.2"
 Then pass it explicitly:
 
 ```python
-from tea import check_judge_task, external_judge
+from tea import check_run_score, external_judge
 
-check_judge_task(run, diff=..., prompt=..., judge=external_judge())
+check_run_score(run, "scoring criteria", judge=external_judge())
 ```

@@ -1,5 +1,5 @@
 """
-Example: LLM-as-judge assertion using check_judge_task.
+Example: LLM-as-judge assertion using check_output_score.
 
 Configure your judge model via env vars before running:
 
@@ -12,7 +12,7 @@ Then run:
     tea examples/demo_calculator/agent-tests/test_judge_quality.py
 """
 
-from tea import Agents, check_judge_task
+from tea import Agents, check_output_score
 
 
 def test_minus_implementation_quality():
@@ -22,10 +22,9 @@ def test_minus_implementation_quality():
         .run()
     )
 
-    check_judge_task(
-        run,
-        diff=run.diff("calculator.py"),
-        prompt=(
+    check_output_score(
+        run.diff("calculator.py"),
+        (
             "Does this diff correctly implement a subtraction operation "
             "without breaking the existing structure? "
             "Score 1.0 if the implementation is clean and complete, "
@@ -35,10 +34,9 @@ def test_minus_implementation_quality():
         min_score=0.7,
     )
 
-    check_judge_task(
-        run,
-        diff=run.transcript,
-        prompt=(
+    check_output_score(
+        run.transcript,
+        (
             "Did the agent make changes directly and confidently without "
             "unnecessary clarifying questions or excessive commentary? "
             "Score 1.0 for decisive execution, 0.0 for excessive hedging."

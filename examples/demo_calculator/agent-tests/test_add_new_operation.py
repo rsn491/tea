@@ -1,9 +1,11 @@
-from tea import Agents, check_diff_added, check_skill_used
-from tea.runner import iterations
-
-# Skills live in examples/demo_calculator/.agents/skills/. That's one of the
-# conventional locations Claude (and Codex and Pi) discover by default, so no
-# explicit ``skills_sources`` configuration is needed here.
+from tea import (
+    Agents,
+    check_diff_added,
+    check_file_changed,
+    check_run_score,
+    check_skill_used,
+    iterations,
+)
 
 
 @iterations(2)
@@ -14,10 +16,21 @@ def test_add_minus_operation():
         .run()
     )
 
+    check_diff_added(run, "calculator.py", "def minus")
+    check_diff_added(run, "test_calculator.py", "def test_minus")
+    check_file_changed(run, "README.md")
     check_skill_used(run, "add-new-operation")
-    check_diff_added(run, "calculator.py", "minus")
-    check_diff_added(run, "test_calculator.py", "test_minus")
-    check_diff_added(run, "README.md", "minus")
+    check_run_score(
+        run,
+        (
+            "Does this diff correctly implement a subtraction operation "
+            "without breaking the existing structure? "
+            "Score 1.0 if the implementation is clean and complete, "
+            "0.5 if it works but has style issues, "
+            "0.0 if it is broken or missing."
+        ),
+        min_score=0.7,
+    )
 
 
 def test_add_multiply_operation():
