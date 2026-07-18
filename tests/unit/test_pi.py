@@ -48,6 +48,30 @@ def test_resolve_cli_version_last_resort_is_latest_date(monkeypatch):
     resolve_cli_version.cache_clear()
 
 
+def test_resolve_cli_version_npm_list_scoped_package(monkeypatch):
+    """The npm-list fallback parses the version off a scoped package line.
+
+    A scoped name contains an '@', so the version must be the part after the
+    *last* '@' — e.g. '@earendil-works/pi-coding-agent@1.2.3' -> '1.2.3'.
+    """
+    monkeypatch.delenv("PI_VERSION", raising=False)
+    pkg = "@earendil-works/pi-coding-agent"
+
+    def fake_run(cmd, **kwargs):
+        class R:
+            stdout = ""
+
+        if cmd[0] == "npm" and cmd[1] == "list":
+            R.stdout = f"/home/x\n└── {pkg}@1.2.3\n"
+            return R
+        raise FileNotFoundError(cmd[0])
+
+    monkeypatch.setattr("tea.agent._version.subprocess.run", fake_run)
+    resolve_cli_version.cache_clear()
+    assert resolve_cli_version("__no_cli__ --version", pkg, "PI_VERSION") == "1.2.3"
+    resolve_cli_version.cache_clear()
+
+
 def test_resolve_cli_version_npm_view_fallback(monkeypatch):
     """With no CLI and no global install, the npm registry version is used."""
     monkeypatch.delenv("PI_VERSION", raising=False)
@@ -427,6 +451,20 @@ def test_install_skills_warns_on_pi_droppable_description(
     skill_dir = tmp_path / "skills" / "greet"
     skill_dir.mkdir(parents=True)
     (skill_dir / "SKILL.md").write_text(f"---\n{frontmatter}\n---\n# greet\n")
+
+    with caplog.at_level("WARNING", logger="tea.agent.pi"):
+        Pi(_ANTHROPIC_CFG).install_skills(
+            _empty_spec(), "Task", str(tmp_path), ["greet"], {"greet": "skills"}
+        )
+    assert any("silently ignore this skill" in r.message for r in caplog.records)
+
+
+def test_install_skills_warns_on_unterminated_frontmatter(tmp_path, caplog):
+    """A frontmatter block that opens with '---' but never closes is not valid
+    frontmatter to Pi, so the skill is dropped — warn on it."""
+    skill_dir = tmp_path / "skills" / "greet"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text("---\ndescription: greet\n# greet body\n")
 
     with caplog.at_level("WARNING", logger="tea.agent.pi"):
         Pi(_ANTHROPIC_CFG).install_skills(
