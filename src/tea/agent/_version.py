@@ -30,12 +30,12 @@ def resolve_cli_version(version_cmd: str, package: str, env_var: str) -> str:
     # 2. Run the caller-supplied version command (e.g. "claude --version")
     try:
         out = subprocess.run(
-            version_cmd.split(), capture_output=True, text=True
+            version_cmd.split(), capture_output=True, text=True, timeout=30
         ).stdout.strip()
         m = re.search(r"(\d+\.\d+\.\d+)", out)
         if m:
             return m.group(1)
-    except FileNotFoundError:
+    except (FileNotFoundError, subprocess.TimeoutExpired):
         pass
 
     # 3. npm list fallback (handles cases where the CLI is not on PATH)
@@ -44,6 +44,7 @@ def resolve_cli_version(version_cmd: str, package: str, env_var: str) -> str:
             ["npm", "list", "-g", "--depth=0", package],
             capture_output=True,
             text=True,
+            timeout=30,
         )
         for line in result.stdout.splitlines():
             if package in line:
@@ -51,20 +52,23 @@ def resolve_cli_version(version_cmd: str, package: str, env_var: str) -> str:
                 version = line.strip().split("@")[-1]
                 if version:
                     return version
-    except FileNotFoundError:
+    except (FileNotFoundError, subprocess.TimeoutExpired):
         pass
 
-    # 3b. npm view fallback — queries the registry for the latest published version
+    # 3b. npm view fallback — queries the registry for the latest published
+    # version (a date-stamped tag is not an installable npm version, so
+    # without this a host with no local install could never build the image).
     try:
         out = subprocess.run(
             ["npm", "view", package, "version"],
             capture_output=True,
             text=True,
+            timeout=30,
         ).stdout.strip()
         m = re.search(r"(\d+\.\d+\.\d+)", out)
         if m:
             return m.group(1)
-    except FileNotFoundError:
+    except (FileNotFoundError, subprocess.TimeoutExpired):
         pass
 
     # 4. Last resort — date-stamped tag so a fresh build is triggered each day

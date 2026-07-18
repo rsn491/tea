@@ -41,6 +41,10 @@ class AgentRun:
     exit_code: int = 0
     stderr: str = ""
     duration_s: float = 0.0
+    # Set when the agent reported an internal failure that its process exit
+    # code did not reflect (e.g. a model/provider error). None means no such
+    # failure was detected.
+    error: str | None = None
     _files_changed_fn: Callable[[], dict[str, FileChange]] = field(
         default=lambda: {}, repr=False, compare=False
     )

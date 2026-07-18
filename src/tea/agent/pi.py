@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import shlex
 from dataclasses import replace
+
+import yaml
 
 from tea.executor import DockerSpec, RawResult
 from tea.executor.docker import DockerExecutor
@@ -13,6 +16,8 @@ from .agent import Agent
 from .agent_run import AgentRun, Step, ToolCall
 from .harness import Harness
 from .model_config import ModelConfig
+
+_log = logging.getLogger(__name__)
 
 _NODE_VERSION = "22"
 _PI_PACKAGE = "@earendil-works/pi-coding-agent"
@@ -36,7 +41,13 @@ class Pi(Agent):
         self, prompt: str, timeout: int, skills: list[str] = ()
     ) -> DockerSpec:
         npm_prefix = "/home/node/.npm-global"
-        env: dict[str, str] = {"HOME": "/home/node", "NPM_CONFIG_PREFIX": npm_prefix}
+        env: dict[str, str] = {
+            "HOME": "/home/node",
+            "NPM_CONFIG_PREFIX": npm_prefix,
+            # Skip pi's startup network operations (update/registry checks) —
+            # they add latency and flakiness; model calls are unaffected.
+            "PI_OFFLINE": "1",
+        }
         api_key: str | None = None
         if self._model_config.api_key_env:
             if key := os.environ.get(self._model_config.api_key_env):
@@ -68,7 +79,7 @@ class Pi(Agent):
         return DockerSpec(
             command=(
                 f"{npm_prefix}/bin/pi --mode json --no-extensions --print"
-                f" --model {self._model_config.model}"
+                f" --model {shlex.quote(self._model_config.model)}"
                 f' "{_esc(prompt)}"'
             ),
             setup_command=setup_command,
@@ -91,12 +102,17 @@ class Pi(Agent):
         """Copy project skills into Pi's native discovery path.
 
         Pi auto-discovers skills from ``~/.pi/agent/skills/<name>/SKILL.md``
-        at startup. The workdir is mounted at ``/workspace``, so each
-        ``SKILL.md`` is copied from its discovered source via a setup command
+        at startup. The workdir is mounted at ``/workspace``, so each skill
+        directory is copied from its discovered source via a setup command
         and the prompt is returned unmodified.
         """
         if not skills:
             return spec, prompt
+        for name in skills:
+            _warn_if_pi_skips_name(name)
+            _warn_if_missing_description(
+                os.path.join(workdir, source_for[name], name, "SKILL.md")
+            )
         skill_cmd = _skill_setup(skills, source_for)
         merged_setup = (
             f"{spec.setup_command} && {skill_cmd}" if spec.setup_command else skill_cmd
@@ -118,6 +134,15 @@ class Pi(Agent):
         run.exit_code = raw.exit_code
         run.stderr = raw.stderr
         run.duration_s = raw.duration_s
+        # Pi's JSON print mode exits 0 even when the model call fails (a dead
+        # endpoint, bad key, or DNS failure yields message_end events with
+        # stopReason="error" and empty content, then exit 0). Surface that
+        # through the channels consumers actually check so a failed run is not
+        # mistaken for a quiet success.
+        if run.error and run.exit_code == 0:
+            run.exit_code = 1
+            if not run.stderr:
+                run.stderr = run.error
         return run
 
 
@@ -170,6 +195,10 @@ def _build_models_json(model: str, base_url: str, api_key: str | None) -> str:
 def _parse(stdout: str) -> AgentRun:
     steps: list[Step] = []
     tools: list[ToolCall] = []
+    # Tracks the failure state of the most recent assistant turn. A later
+    # successful turn (e.g. after a retry) clears it, so only a run whose final
+    # assistant message errored is reported as failed.
+    last_error: str | None = None
 
     for line in stdout.splitlines():
         line = line.strip()
@@ -187,6 +216,13 @@ def _parse(stdout: str) -> AgentRun:
             message = event.get("message", {})
             if message.get("role") != "assistant":
                 continue
+            if message.get("stopReason") in ("error", "aborted"):
+                last_error = (
+                    message.get("errorMessage")
+                    or f"pi stopReason={message.get('stopReason')}"
+                )
+            else:
+                last_error = None
             content = message.get("content", [])
             if isinstance(content, list):
                 for block in content:
@@ -217,17 +253,19 @@ def _parse(stdout: str) -> AgentRun:
                 content = ""
             steps.append(Step(type="tool_result", content=content, raw=event))
 
-    return AgentRun(raw=stdout, steps=steps, tools=tools, skills=[])
+    return AgentRun(raw=stdout, steps=steps, tools=tools, skills=[], error=last_error)
 
 
 def _skill_setup(skills: list[str], source_for: dict[str, str]) -> str:
     """Build the shell prelude that installs skills into Pi's native path.
 
-    Reads ``/workspace/<source_for[name]>/<name>/SKILL.md`` (mounted workdir)
-    and copies into ``~/.pi/agent/skills/<name>/SKILL.md`` so Pi auto-discovers
-    them at startup.
+    Copies each ``/workspace/<source_for[name]>/<name>/`` directory (mounted
+    workdir) into ``~/.pi/agent/skills/`` so Pi auto-discovers the skills at
+    startup. The whole directory is copied, not just ``SKILL.md``: Pi tells
+    the model to resolve relative paths in a skill against the skill
+    directory, so supporting files must travel with it.
     """
-    cmds = []
+    cmds = [f"mkdir -p {_PI_NATIVE_SKILLS_DIR}"]
     for name in skills:
         # shlex.quote protects the shell word but not the path: a name like
         # "../evil" would still be interpreted as a path traversal once the
@@ -236,10 +274,72 @@ def _skill_setup(skills: list[str], source_for: dict[str, str]) -> str:
             raise ValueError(f"Invalid skill name: {name!r}")
         quoted = shlex.quote(name)
         src_base = f"{_CONTAINER_WORKDIR}/{source_for[name]}"
-        src = f"{shlex.quote(src_base)}/{quoted}/SKILL.md"
-        dst_dir = f"{_PI_NATIVE_SKILLS_DIR}/{quoted}"
-        cmds.append(f"mkdir -p {dst_dir} && cp {src} {dst_dir}/SKILL.md")
+        src = f"{shlex.quote(src_base)}/{quoted}"
+        cmds.append(f"cp -R {src} {_PI_NATIVE_SKILLS_DIR}/")
     return " && ".join(cmds)
+
+
+def _warn_if_pi_skips_name(name: str) -> None:
+    """Warn when Pi's discovery will silently skip a copied skill directory.
+
+    Pi's skill scanner ignores directory entries whose name starts with ``.``
+    or is exactly ``node_modules`` (see dist/core/skills.js). Such a skill is
+    copied into the native path but never advertised to the model and produces
+    no diagnostic, so surface it on the host.
+    """
+    if name.startswith(".") or name == "node_modules":
+        _log.warning(
+            "skill %r will be silently skipped by Pi (it ignores dot-prefixed "
+            "and node_modules directories); the model will not see it",
+            name,
+        )
+
+
+def _warn_if_missing_description(skill_md_path: str) -> None:
+    """Warn when a SKILL.md lacks the frontmatter description Pi requires.
+
+    Pi parses the frontmatter as YAML and silently drops any skill whose
+    parsed ``description`` is missing or empty, or whose frontmatter fails to
+    parse at all (it emits only a startup diagnostic inside the container),
+    which is painful to debug from outside. Mirror that accept/drop logic here
+    with a real YAML parse so the host warning matches Pi's actual behavior.
+    """
+    try:
+        with open(skill_md_path, encoding="utf-8") as fh:
+            content = fh.read()
+    except OSError:
+        return
+    frontmatter = _extract_frontmatter(content)
+    reason: str | None = None
+    if frontmatter is None:
+        reason = "has no YAML frontmatter block"
+    else:
+        try:
+            data = yaml.safe_load(frontmatter)
+        except yaml.YAMLError:
+            reason = "has frontmatter that is not valid YAML"
+        else:
+            description = ""
+            if isinstance(data, dict):
+                description = str(data.get("description") or "").strip()
+            if not description:
+                reason = "has no frontmatter 'description'"
+    if reason is not None:
+        _log.warning(
+            "SKILL.md at %s %s; Pi will silently ignore this skill",
+            skill_md_path,
+            reason,
+        )
+
+
+def _extract_frontmatter(content: str) -> str | None:
+    """Return the YAML frontmatter block, or None if absent."""
+    if not content.startswith("---"):
+        return None
+    end = content.find("\n---", 3)
+    if end == -1:
+        return None
+    return content[3:end]
 
 
 def _esc(text: str) -> str:

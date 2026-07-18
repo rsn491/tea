@@ -225,16 +225,31 @@ def test_agent_install_skills_is_abstract():
 
 
 def test_harness_calls_install_skills_when_skills_and_workdir(tmp_path):
-    agent = _PromptCapturingAgent()
-    executor = _RecordingExecutor()
-    Harness(agent, executor)._execute(
+    calls: list[tuple[Any, ...]] = []
+
+    class _Counter(_PromptCapturingAgent):
+        def install_skills(self, spec, prompt, workdir, skills, source_for):
+            calls.append((spec, prompt, workdir, skills, source_for))
+            return spec, prompt
+
+    agent = _Counter()
+    Harness(agent, _RecordingExecutor())._execute(
         "base prompt",
         timeout=30,
         workdir=str(tmp_path),
         skills=["s"],
         source_for={"s": "skills"},
     )
-    assert agent.received_prompt == "base prompt"
+    # The point of this test is that the install_skills branch actually runs —
+    # received_prompt alone is set by build_spec regardless, so assert the call.
+    assert len(calls) == 1
+    _, prompt, workdir, skills, source_for = calls[0]
+    assert (prompt, workdir, skills, source_for) == (
+        "base prompt",
+        str(tmp_path),
+        ["s"],
+        {"s": "skills"},
+    )
 
 
 def test_harness_skips_install_skills_when_no_workdir():
@@ -580,8 +595,7 @@ def test_pi_install_skills_copies_into_native_path():
     assert prompt == "Do the task"  # Pi doesn't touch the prompt
     assert spec.setup_command is not None
     assert (
-        "cp /workspace/skills/add-operation/SKILL.md"
-        " /home/node/.pi/agent/skills/add-operation/SKILL.md"
+        "cp -R /workspace/skills/add-operation /home/node/.pi/agent/skills/"
     ) in spec.setup_command
 
 
@@ -708,7 +722,9 @@ def test_pi_harness_with_skills_runs_install_skills(tmp_path):
     spec = executor.spec
     assert isinstance(spec, DockerSpec)
     assert spec.setup_command is not None
-    assert "/home/node/.pi/agent/skills/regression" in spec.setup_command
+    assert "cp -R /workspace/skills/regression /home/node/.pi/agent/skills/" in (
+        spec.setup_command
+    )
 
 
 def test_pi_skill_name_injection_is_quoted():
