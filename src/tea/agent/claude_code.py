@@ -6,11 +6,12 @@ import shlex
 from dataclasses import replace
 
 from tea.executor import DockerSpec, RawResult
-from tea.executor.docker import DockerExecutor
+from tea.executor.docker_executor import DockerExecutor
 
+from ._utils import _sanitize_env_value
 from ._version import resolve_cli_version
 from .agent import Agent
-from .agent_run import AgentRun, Step, ToolCall
+from .agent_run import AgentRun, Step, StepType, ToolCall
 from .harness import ApiKeyHarness, Harness
 
 _NODE_VERSION = "22"
@@ -57,23 +58,19 @@ class ClaudeCode(Agent):
             env["CLAUDE_CODE_OAUTH_TOKEN"] = token
 
         extra_volumes: dict[str, str] = {}
-        # Mount only OAuth credentials from the host ~/.claude — not the whole
-        # directory, which would leak the developer's personal skills, agents,
-        # and settings into the test container.
-        host_creds = os.path.expanduser("~/.claude/.credentials.json")
-        if os.path.isfile(host_creds):
-            extra_volumes[host_creds] = "/home/node/.claude/.credentials.json"
         extra_volumes.update(self._extra_volumes)
 
         version = self.version()
         image = f"tea-claude-code:{version}"
+
+        env["CLAUDE_PROMPT"] = _sanitize_env_value(prompt)
 
         return DockerSpec(
             command=(
                 f"{npm_prefix}/bin/claude --dangerously-skip-permissions"
                 f" --model {shlex.quote(self._model)}"
                 f" --max-turns {int(self._max_turns)}"
-                f' --print --output-format stream-json --verbose "{_esc(prompt)}"'
+                ' --print --output-format stream-json --verbose "$CLAUDE_PROMPT"'
             ),
             dockerfile=self._dockerfile(version),
             env=env,
@@ -168,7 +165,7 @@ class ClaudeCode(Agent):
                     block_type = block.get("type")
                     if block_type == "text":
                         steps.append(
-                            Step(type="text", content=block["text"], raw=block)
+                            Step(type=StepType.TEXT, content=block["text"], raw=block)
                         )
                     elif block_type == "tool_use":
                         tc = ToolCall(
@@ -179,7 +176,7 @@ class ClaudeCode(Agent):
                         tools.append(tc)
                         steps.append(
                             Step(
-                                type="tool_use",
+                                type=StepType.TOOL_USE,
                                 content=json.dumps(block.get("input", {})),
                                 raw=block,
                             )
@@ -196,7 +193,7 @@ class ClaudeCode(Agent):
                     )
                 else:
                     text = str(content)
-                steps.append(Step(type="tool_result", content=text, raw=msg))
+                steps.append(Step(type=StepType.TOOL_RESULT, content=text, raw=msg))
 
         return AgentRun(raw=stdout, steps=steps, tools=tools, skills=skills)
 
@@ -213,12 +210,3 @@ class ClaudeCodeHarness(ApiKeyHarness):
             DockerExecutor(),
             skills_sources=self.skills_sources,
         )
-
-
-def _esc(text: str) -> str:
-    return (
-        text.replace("\\", "\\\\")
-        .replace('"', '\\"')
-        .replace("`", "\\`")
-        .replace("$", "\\$")
-    )

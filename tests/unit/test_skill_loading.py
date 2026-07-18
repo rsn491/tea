@@ -16,7 +16,7 @@ from tea.agent.model_config import ModelConfig
 from tea.agent.pi import Pi
 from tea.agent.run_builder import RunBuilder, _discover_skills, _resolve_skill_sources
 from tea.executor import DockerSpec, ExecutionSpec, Executor, RawResult
-from tea.executor.docker import DockerExecutor
+from tea.executor.docker_executor import DockerExecutor
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -506,20 +506,6 @@ def test_claude_code_extra_volumes_defaults_empty(monkeypatch):
     monkeypatch.setattr(os.path, "isfile", lambda p: False)
     spec = ClaudeCode().build_spec("task", 60)
     assert spec.extra_volumes == {}
-
-
-# ── ClaudeCode host mount: scoped to .credentials.json, not the whole dir ────
-
-
-def test_claude_code_mounts_only_credentials_file(monkeypatch):
-    """The host ~/.claude mount used to leak personal skills/agents/settings."""
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    monkeypatch.delenv("CLAUDE_CODE_OAUTH_TOKEN", raising=False)
-    creds_path = os.path.expanduser("~/.claude/.credentials.json")
-    monkeypatch.setattr(os.path, "isfile", lambda p: p == creds_path)
-    spec = ClaudeCode().build_spec("task", 60)
-    # Only the credentials file is mounted — never the full ~/.claude dir.
-    assert spec.extra_volumes == {creds_path: "/home/node/.claude/.credentials.json"}
 
 
 # ── ClaudeCodeHarness uses public properties ─────────────────────────────────

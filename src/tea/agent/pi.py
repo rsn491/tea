@@ -9,11 +9,12 @@ from dataclasses import replace
 import yaml
 
 from tea.executor import DockerSpec, RawResult
-from tea.executor.docker import DockerExecutor
+from tea.executor.docker_executor import DockerExecutor
 
+from ._utils import _sanitize_env_value
 from ._version import resolve_cli_version
 from .agent import Agent
-from .agent_run import AgentRun, Step, ToolCall
+from .agent_run import AgentRun, Step, StepType, ToolCall
 from .harness import Harness
 from .model_config import ModelConfig
 
@@ -37,9 +38,7 @@ class Pi(Agent):
     def __init__(self, model_config: ModelConfig) -> None:
         self._model_config = model_config
 
-    def build_spec(
-        self, prompt: str, timeout: int, skills: list[str] = ()
-    ) -> DockerSpec:
+    def build_spec(self, prompt: str, timeout: int) -> DockerSpec:
         npm_prefix = "/home/node/.npm-global"
         env: dict[str, str] = {
             "HOME": "/home/node",
@@ -76,11 +75,13 @@ class Pi(Agent):
         version = self.version()
         image = f"tea-pi:{version}"
 
+        env["PI_PROMPT"] = _sanitize_env_value(prompt)
+
         return DockerSpec(
             command=(
                 f"{npm_prefix}/bin/pi --mode json --no-extensions --print"
                 f" --model {shlex.quote(self._model_config.model)}"
-                f' "{_esc(prompt)}"'
+                ' "$PI_PROMPT"'
             ),
             setup_command=setup_command,
             dockerfile=self._dockerfile(version),
@@ -229,9 +230,11 @@ def _parse(stdout: str) -> AgentRun:
                     if isinstance(block, dict) and block.get("type") == "text":
                         text = block.get("text", "")
                         if text:
-                            steps.append(Step(type="text", content=text, raw=event))
+                            steps.append(
+                                Step(type=StepType.TEXT, content=text, raw=event)
+                            )
             elif isinstance(content, str) and content:
-                steps.append(Step(type="text", content=content, raw=event))
+                steps.append(Step(type=StepType.TEXT, content=content, raw=event))
 
         elif event_type == "tool_execution_start":
             tool_name = event.get("toolName", "")
@@ -241,7 +244,9 @@ def _parse(stdout: str) -> AgentRun:
                 args = {}
             tc = ToolCall(name=tool_name, input=args, tool_use_id=tool_call_id)
             tools.append(tc)
-            steps.append(Step(type="tool_use", content=json.dumps(args), raw=event))
+            steps.append(
+                Step(type=StepType.TOOL_USE, content=json.dumps(args), raw=event)
+            )
 
         elif event_type == "tool_execution_end":
             result = event.get("result")
@@ -251,7 +256,7 @@ def _parse(stdout: str) -> AgentRun:
                 content = str(result)
             else:
                 content = ""
-            steps.append(Step(type="tool_result", content=content, raw=event))
+            steps.append(Step(type=StepType.TOOL_RESULT, content=content, raw=event))
 
     return AgentRun(raw=stdout, steps=steps, tools=tools, skills=[], error=last_error)
 
@@ -340,12 +345,3 @@ def _extract_frontmatter(content: str) -> str | None:
     if end == -1:
         return None
     return content[3:end]
-
-
-def _esc(text: str) -> str:
-    return (
-        text.replace("\\", "\\\\")
-        .replace('"', '\\"')
-        .replace("`", "\\`")
-        .replace("$", "\\$")
-    )

@@ -8,7 +8,6 @@ from pydantic_ai.models import Model
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
 
-from .harness_judge import HarnessJudge
 from .judge import Judge, JudgeResult
 
 
@@ -34,10 +33,6 @@ class PydanticAIJudge(Judge):
         message = f"{prompt}\n\nContent:\n{content}"
         result = self._agent.run_sync(message)
         return JudgeResult(score=result.output.score, rationale=result.output.rationale)
-
-
-def default_judge() -> Judge:
-    return HarnessJudge()
 
 
 def external_judge() -> Judge:

@@ -23,6 +23,14 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="N",
         help="number of times to run each test (default: 1)",
     )
+    parser.add_argument(
+        "--workers",
+        "-w",
+        type=int,
+        default=1,
+        metavar="N",
+        help="number of tests to run concurrently (default: 1)",
+    )
     return parser
 
 
@@ -36,7 +44,7 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     print_banner()
     try:
-        run(args.target, args.iterations)
+        run(args.target, args.iterations, workers=args.workers)
     except KeyboardInterrupt:
         print("\nInterrupted.")
         sys.exit(130)

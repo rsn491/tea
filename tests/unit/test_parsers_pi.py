@@ -1,5 +1,6 @@
 import json
 
+from tea.agent.agent_run import StepType
 from tea.agent.pi import _parse
 
 SESSION = {"type": "session", "version": 3, "id": "abc123", "cwd": "/workspace"}
@@ -64,13 +65,13 @@ def _lines(*events) -> str:
 def test_text_step():
     run = _parse(_lines(SESSION, AGENT_START, TEXT_MESSAGE_END, AGENT_END))
     assert len(run.steps) == 1
-    assert run.steps[0].type == "text"
+    assert run.steps[0].type == StepType.TEXT
     assert run.steps[0].content == "I will help you."
 
 
 def test_multi_text_blocks_in_one_message():
     run = _parse(_lines(SESSION, MULTI_TEXT_MESSAGE_END))
-    text_steps = [s for s in run.steps if s.type == "text"]
+    text_steps = [s for s in run.steps if s.type == StepType.TEXT]
     assert len(text_steps) == 2
     assert text_steps[0].content == "First sentence."
     assert text_steps[1].content == "Second sentence."
@@ -97,7 +98,7 @@ def test_user_message_end_is_ignored():
 def test_tool_use_step_and_tool_call():
     run = _parse(_lines(SESSION, TOOL_START))
     assert len(run.steps) == 1
-    assert run.steps[0].type == "tool_use"
+    assert run.steps[0].type == StepType.TOOL_USE
     assert len(run.tools) == 1
     assert run.tools[0].name == "bash"
     assert run.tools[0].tool_use_id == "tc_1"
@@ -106,14 +107,14 @@ def test_tool_use_step_and_tool_call():
 
 def test_tool_result_step_string():
     run = _parse(_lines(SESSION, TOOL_START, TOOL_END))
-    tool_result_steps = [s for s in run.steps if s.type == "tool_result"]
+    tool_result_steps = [s for s in run.steps if s.type == StepType.TOOL_RESULT]
     assert len(tool_result_steps) == 1
     assert "total 0" in tool_result_steps[0].content
 
 
 def test_tool_result_step_dict():
     run = _parse(_lines(SESSION, TOOL_END_DICT_RESULT))
-    tool_result_steps = [s for s in run.steps if s.type == "tool_result"]
+    tool_result_steps = [s for s in run.steps if s.type == StepType.TOOL_RESULT]
     assert len(tool_result_steps) == 1
     assert "file contents" in tool_result_steps[0].content
 
@@ -122,10 +123,10 @@ def test_mixed_sequence_ordering():
     run = _parse(
         _lines(SESSION, TEXT_MESSAGE_END, TOOL_START, TOOL_END, TEXT_MESSAGE_END)
     )
-    assert run.steps[0].type == "text"
-    assert run.steps[1].type == "tool_use"
-    assert run.steps[2].type == "tool_result"
-    assert run.steps[3].type == "text"
+    assert run.steps[0].type == StepType.TEXT
+    assert run.steps[1].type == StepType.TOOL_USE
+    assert run.steps[2].type == StepType.TOOL_RESULT
+    assert run.steps[3].type == StepType.TEXT
     assert len(run.tools) == 1
 
 
@@ -139,7 +140,7 @@ def test_malformed_lines_skipped():
     stdout = "not json\n" + json.dumps(TEXT_MESSAGE_END) + "\nalso bad\n"
     run = _parse(stdout)
     assert len(run.steps) == 1
-    assert run.steps[0].type == "text"
+    assert run.steps[0].type == StepType.TEXT
 
 
 def test_empty_output():
@@ -169,7 +170,7 @@ def test_message_end_with_string_content():
     }
     run = _parse(_lines(SESSION, event))
     assert len(run.steps) == 1
-    assert run.steps[0].type == "text"
+    assert run.steps[0].type == StepType.TEXT
     assert run.steps[0].content == "raw string body"
 
 
@@ -193,7 +194,7 @@ def test_tool_execution_end_with_no_result_yields_empty_content():
         # no "result" key
     }
     run = _parse(_lines(SESSION, event))
-    tool_result_steps = [s for s in run.steps if s.type == "tool_result"]
+    tool_result_steps = [s for s in run.steps if s.type == StepType.TOOL_RESULT]
     assert len(tool_result_steps) == 1
     assert tool_result_steps[0].content == ""
 
@@ -202,7 +203,7 @@ def test_blank_lines_in_stream_are_skipped():
     stdout = "\n\n" + json.dumps(TEXT_MESSAGE_END) + "\n   \n"
     run = _parse(stdout)
     assert len(run.steps) == 1
-    assert run.steps[0].type == "text"
+    assert run.steps[0].type == StepType.TEXT
 
 
 def test_tool_execution_end_with_scalar_result_is_stringified():
@@ -213,6 +214,6 @@ def test_tool_execution_end_with_scalar_result_is_stringified():
         "result": 42,
     }
     run = _parse(_lines(SESSION, event))
-    tool_result_steps = [s for s in run.steps if s.type == "tool_result"]
+    tool_result_steps = [s for s in run.steps if s.type == StepType.TOOL_RESULT]
     assert len(tool_result_steps) == 1
     assert tool_result_steps[0].content == "42"

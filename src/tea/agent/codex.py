@@ -1,21 +1,24 @@
 from __future__ import annotations
 
+import json
 import os
+import re
 import shlex
 from dataclasses import replace
 
 from tea.executor import DockerSpec, RawResult
-from tea.executor.docker import DockerExecutor
+from tea.executor.docker_executor import DockerExecutor
 
+from ._utils import _sanitize_env_value
 from ._version import resolve_cli_version
 from .agent import Agent
-from .agent_run import AgentRun, Step
+from .agent_run import AgentRun, Step, StepType, ToolCall
 from .harness import ApiKeyHarness, Harness
 
 _NODE_VERSION = "22"
 _CODEX_PACKAGE = "@openai/codex"
 _CODEX_VERSION_ENV = "CODEX_VERSION"
-_DEFAULT_MODEL = "gpt-5.3-codex"
+_DEFAULT_MODEL = "gpt-5.2-codex"
 
 # DockerExecutor mounts the workdir at this path; install_skills relies on it.
 _CONTAINER_WORKDIR = "/workspace"
@@ -27,22 +30,29 @@ class Codex(Agent):
     def __init__(self, model: str = _DEFAULT_MODEL) -> None:
         self._model = model
 
+    @property
+    def model(self) -> str:
+        return self._model
+
     def build_spec(self, prompt: str, timeout: int) -> DockerSpec:
         npm_prefix = "/home/node/.npm-global"
         env: dict[str, str] = {"HOME": "/home/node", "NPM_CONFIG_PREFIX": npm_prefix}
+        # API-key auth: forward OPENAI_API_KEY (recommended for programmatic use).
         if api_key := os.environ.get("OPENAI_API_KEY"):
             env["OPENAI_API_KEY"] = api_key
 
         version = self.version()
         image = f"tea-codex:{version}"
 
+        env["CODEX_PROMPT"] = _sanitize_env_value(prompt)
+
         return DockerSpec(
             command=(
-                f"{npm_prefix}/bin/codex exec"
+                f"{npm_prefix}/bin/codex exec --json"
                 f" --dangerously-bypass-approvals-and-sandbox"
                 f" --skip-git-repo-check --ephemeral"
                 f" -m {shlex.quote(self._model)}"
-                f' "{_esc(prompt)}"'
+                ' "$CODEX_PROMPT"'
             ),
             dockerfile=self._dockerfile(version),
             env=env,
@@ -85,8 +95,7 @@ class Codex(Agent):
         )
 
     def parse(self, raw: RawResult) -> AgentRun:
-        steps = _parse_output(raw.stdout)
-        run = AgentRun(raw=raw.stdout, steps=steps, tools=[], skills=[])
+        run = _parse(raw.stdout)
         run.exit_code = raw.exit_code
         run.stderr = raw.stderr
         run.duration_s = raw.duration_s
@@ -95,7 +104,8 @@ class Codex(Agent):
 
 class CodexHarness(ApiKeyHarness):
     def with_api_key(self) -> Harness:
-        model = self._agent._model if isinstance(self._agent, Codex) else _DEFAULT_MODEL
+        agent = self._agent
+        model = agent.model if isinstance(agent, Codex) else _DEFAULT_MODEL
         return Harness(
             Codex(model=model),
             DockerExecutor(),
@@ -124,19 +134,96 @@ def _skill_setup(skills: list[str], source_for: dict[str, str]) -> str:
     return " && ".join(cmds)
 
 
-def _parse_output(stdout: str) -> list[Step]:
+_SKILL_PATH_RE = re.compile(r"(?:^|[\s/\"'])skills/([A-Za-z0-9_.-]+)/SKILL\.md")
+
+
+def _parse(stdout: str) -> AgentRun:
+    """Parse codex's ``--json`` JSONL event stream.
+
+    Codex emits one event per line: ``thread.started``, ``turn.started``,
+    ``item.started`` / ``item.completed`` (with an ``item.type`` of
+    ``agent_message``, ``reasoning``, ``command_execution``, ``file_change``,
+    ``mcp_tool_call``, ``web_search``, ``todo_list``, ``error``), and
+    ``turn.completed`` / ``turn.failed``. See
+    https://developers.openai.com/codex/noninteractive.
+    """
     steps: list[Step] = []
+    tools: list[ToolCall] = []
+    skills: list[str] = []
+
     for line in stdout.splitlines():
         line = line.strip()
-        if line:
-            steps.append(Step(type="text", content=line, raw={}))
-    return steps
+        if not line:
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if event.get("type") != "item.completed":
+            continue
 
+        item = event.get("item") or {}
+        item_type = item.get("type")
+        item_id = str(item.get("id", ""))
 
-def _esc(text: str) -> str:
-    return (
-        text.replace("\\", "\\\\")
-        .replace('"', '\\"')
-        .replace("`", "\\`")
-        .replace("$", "\\$")
-    )
+        if item_type in ("agent_message", "reasoning"):
+            text = item.get("text", "")
+            if text:
+                steps.append(Step(type=StepType.TEXT, content=text, raw=item))
+
+        elif item_type == "command_execution":
+            command = item.get("command", "")
+            tool_input = {"command": command}
+            tc = ToolCall(name="bash", input=tool_input, tool_use_id=item_id)
+            tools.append(tc)
+            steps.append(
+                Step(type=StepType.TOOL_USE, content=json.dumps(tool_input), raw=item)
+            )
+            steps.append(
+                Step(
+                    type=StepType.TOOL_RESULT,
+                    content=item.get("aggregated_output", ""),
+                    raw=item,
+                )
+            )
+            for match in _SKILL_PATH_RE.finditer(command):
+                name = match.group(1)
+                if name not in skills:
+                    skills.append(name)
+
+        elif item_type == "file_change":
+            changes = item.get("changes", [])
+            tool_input = {"changes": changes}
+            tc = ToolCall(name="apply_patch", input=tool_input, tool_use_id=item_id)
+            tools.append(tc)
+            steps.append(
+                Step(type=StepType.TOOL_USE, content=json.dumps(tool_input), raw=item)
+            )
+
+        elif item_type == "mcp_tool_call":
+            tool_name = item.get("tool") or item.get("tool_name", "")
+            args = item.get("arguments") or {}
+            if not isinstance(args, dict):
+                args = {}
+            tc = ToolCall(name=tool_name, input=args, tool_use_id=item_id)
+            tools.append(tc)
+            steps.append(
+                Step(type=StepType.TOOL_USE, content=json.dumps(args), raw=item)
+            )
+            result = item.get("result")
+            if result is not None:
+                content = (
+                    json.dumps(result) if isinstance(result, dict) else str(result)
+                )
+                steps.append(Step(type=StepType.TOOL_RESULT, content=content, raw=item))
+
+        elif item_type == "web_search":
+            query = item.get("query", "")
+            tool_input = {"query": query}
+            tc = ToolCall(name="web_search", input=tool_input, tool_use_id=item_id)
+            tools.append(tc)
+            steps.append(
+                Step(type=StepType.TOOL_USE, content=json.dumps(tool_input), raw=item)
+            )
+
+    return AgentRun(raw=stdout, steps=steps, tools=tools, skills=skills)
