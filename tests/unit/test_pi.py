@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import date
 
 import pytest
@@ -12,7 +13,6 @@ from tea.agent.pi import (
     Pi,
     PiHarness,
     _build_models_json,
-    _read_skill_description,
 )
 from tea.executor import DockerSpec, RawResult
 
@@ -33,13 +33,66 @@ def test_resolve_cli_version_uses_env_var(monkeypatch):
 def test_resolve_cli_version_last_resort_is_latest_date(monkeypatch):
     """When env var, CLI, and npm all fail the version is latest-<yyyyMMdd>."""
     monkeypatch.delenv("PI_VERSION", raising=False)
+    # Simulate a host with no CLI and no npm at all — keeps the test hermetic
+    # (the npm-view fallback would otherwise do a live registry round-trip).
+    monkeypatch.setattr(
+        "tea.agent._version.subprocess.run",
+        lambda *a, **kw: (_ for _ in ()).throw(FileNotFoundError()),
+    )
     resolve_cli_version.cache_clear()
-    # Use a nonsense CLI name so both the CLI and npm fallback fail
     version = resolve_cli_version(
         "__no_such_cli__ --version", "__no_such_pkg__", "PI_VERSION"
     )
     expected = f"latest-{date.today().strftime('%Y%m%d')}"
     assert version == expected
+    resolve_cli_version.cache_clear()
+
+
+def test_resolve_cli_version_npm_list_scoped_package(monkeypatch):
+    """The npm-list fallback parses the version off a scoped package line.
+
+    A scoped name contains an '@', so the version must be the part after the
+    *last* '@' — e.g. '@earendil-works/pi-coding-agent@1.2.3' -> '1.2.3'.
+    """
+    monkeypatch.delenv("PI_VERSION", raising=False)
+    pkg = "@earendil-works/pi-coding-agent"
+
+    def fake_run(cmd, **kwargs):
+        class R:
+            stdout = ""
+
+        if cmd[0] == "npm" and cmd[1] == "list":
+            R.stdout = f"/home/x\n└── {pkg}@1.2.3\n"
+            return R
+        raise FileNotFoundError(cmd[0])
+
+    monkeypatch.setattr("tea.agent._version.subprocess.run", fake_run)
+    resolve_cli_version.cache_clear()
+    assert resolve_cli_version("__no_cli__ --version", pkg, "PI_VERSION") == "1.2.3"
+    resolve_cli_version.cache_clear()
+
+
+def test_resolve_cli_version_npm_view_fallback(monkeypatch):
+    """With no CLI and no global install, the npm registry version is used."""
+    monkeypatch.delenv("PI_VERSION", raising=False)
+
+    def fake_run(cmd, **kwargs):
+        class R:
+            stdout = ""
+
+        if cmd[0] == "npm" and cmd[1] == "view":
+            R.stdout = "9.9.9\n"
+            return R
+        if cmd[0] == "npm":
+            return R
+        raise FileNotFoundError(cmd[0])
+
+    monkeypatch.setattr("tea.agent._version.subprocess.run", fake_run)
+    resolve_cli_version.cache_clear()
+    version = resolve_cli_version(
+        "__no_such_cli__ --version", "@scope/some-pkg", "PI_VERSION"
+    )
+    assert version == "9.9.9"
     resolve_cli_version.cache_clear()
 
 
@@ -66,8 +119,27 @@ def test_build_spec_defaults_no_base_url(monkeypatch):
     assert spec.extra_hosts == {}
     assert spec.setup_command is None
     assert "FROM node:22" in spec.dockerfile
-    assert "pi@1.0.0" in spec.dockerfile
+    assert "@earendil-works/pi-coding-agent@1.0.0" in spec.dockerfile
     assert "--model anthropic/claude-sonnet-4-6" in spec.command
+    # These flags are load-bearing: without --print pi opens a TUI and exits
+    # silently; without --mode json parse() finds no events and returns empty
+    # steps; --no-extensions keeps startup deterministic.
+    assert "--print" in spec.command
+    assert "--mode json" in spec.command
+    assert "--no-extensions" in spec.command
+    assert spec.env["PI_OFFLINE"] == "1"
+    resolve_cli_version.cache_clear()
+
+
+def test_build_spec_model_injection_is_quoted(monkeypatch):
+    """A hostile model string must not break out of the pi command line."""
+    monkeypatch.setenv("PI_VERSION", "1.0.0")
+    resolve_cli_version.cache_clear()
+    cfg = ModelConfig("ollama/qwen; touch /tmp/PWNED")
+    spec = Pi(cfg).build_spec("hello", timeout=60)
+    assert "--model 'ollama/qwen; touch /tmp/PWNED'" in spec.command
+    sanitised = spec.command.replace("'ollama/qwen; touch /tmp/PWNED'", "SAFE")
+    assert "touch /tmp/PWNED" not in sanitised
     resolve_cli_version.cache_clear()
 
 
@@ -188,31 +260,58 @@ def test_pi_parse_attaches_exit_code_stderr_and_duration():
     assert run.duration_s == pytest.approx(1.25)
     assert len(run.steps) == 1
     assert run.steps[0].content == "ok"
+    assert run.error is None
 
 
-# ── _read_skill_description ───────────────────────────────────────────────────
+def _assistant_end(*, stop_reason="stop", text="", error_message=None):
+    message = {"role": "assistant", "stopReason": stop_reason, "content": []}
+    if text:
+        message["content"] = [{"type": "text", "text": text}]
+    if error_message is not None:
+        message["errorMessage"] = error_message
+    return json.dumps({"type": "message_end", "message": message})
 
 
-def test_read_skill_description_parses_frontmatter(tmp_path):
-    skill = tmp_path / "SKILL.md"
-    skill.write_text("---\ndescription: Add a new math operation\n---\n# body\n")
-    assert _read_skill_description(str(skill)) == "Add a new math operation"
+def test_pi_parse_surfaces_model_error_as_nonzero_exit():
+    """pi json mode exits 0 on model failure; the harness must not report success."""
+    stdout = "\n".join(
+        _assistant_end(stop_reason="error", error_message="Connection error.")
+        for _ in range(4)
+    )
+    raw = RawResult(stdout=stdout, stderr="", exit_code=0, duration_s=0.5)
+    run = Pi(_ANTHROPIC_CFG).parse(raw)
+
+    assert run.error == "Connection error."
+    assert run.exit_code == 1, "a failed model call must surface as nonzero exit"
+    assert run.stderr == "Connection error."
+    assert run.steps == []
 
 
-def test_read_skill_description_missing_file():
-    assert _read_skill_description("/nonexistent/SKILL.md") == ""
+def test_pi_parse_error_then_success_is_not_flagged():
+    """A retry that eventually succeeds is a successful run, not a failure."""
+    stdout = "\n".join(
+        [
+            _assistant_end(stop_reason="error", error_message="Connection error."),
+            _assistant_end(stop_reason="stop", text="recovered"),
+        ]
+    )
+    raw = RawResult(stdout=stdout, stderr="", exit_code=0, duration_s=0.5)
+    run = Pi(_ANTHROPIC_CFG).parse(raw)
+
+    assert run.error is None
+    assert run.exit_code == 0
+    assert [s.content for s in run.steps] == ["recovered"]
 
 
-def test_read_skill_description_no_frontmatter(tmp_path):
-    skill = tmp_path / "SKILL.md"
-    skill.write_text("# No frontmatter here\n")
-    assert _read_skill_description(str(skill)) == ""
+def test_pi_parse_error_does_not_override_real_nonzero_exit():
+    """A genuine container exit code is preserved, not clobbered to 1."""
+    stdout = _assistant_end(stop_reason="error", error_message="boom")
+    raw = RawResult(stdout=stdout, stderr="real stderr", exit_code=137, duration_s=0.1)
+    run = Pi(_ANTHROPIC_CFG).parse(raw)
 
-
-def test_read_skill_description_no_description_key(tmp_path):
-    skill = tmp_path / "SKILL.md"
-    skill.write_text("---\ntitle: Something\n---\n")
-    assert _read_skill_description(str(skill)) == ""
+    assert run.error == "boom"
+    assert run.exit_code == 137
+    assert run.stderr == "real stderr"
 
 
 # ── Pi.install_skills ─────────────────────────────────────────────────────────
@@ -222,25 +321,40 @@ def _empty_spec() -> DockerSpec:
     return DockerSpec(command="noop", image="x")
 
 
-def test_install_skills_prepends_listing(tmp_path):
-    skill_dir = tmp_path / "skills" / "add-operation"
-    skill_dir.mkdir(parents=True)
-    (skill_dir / "SKILL.md").write_text(
-        "---\ndescription: How to add an operation\n---\n# body\n"
-    )
-    spec = _empty_spec()
-    out_spec, prompt = Pi(_ANTHROPIC_CFG).install_skills(
-        spec,
+def test_install_skills_copies_into_pi_native_path():
+    """Pi auto-discovers skills from ~/.pi/agent/skills/<name>/SKILL.md."""
+    spec, prompt = Pi(_ANTHROPIC_CFG).install_skills(
+        _empty_spec(),
         "Do the task",
-        str(tmp_path),
+        "/tmp/anywhere",
         ["add-operation"],
         {"add-operation": "skills"},
     )
-    assert out_spec is spec  # Pi delivers via prompt, not spec
-    assert "Available skills:" in prompt
-    assert "add-operation: How to add an operation" in prompt
-    assert "skills/add-operation/SKILL.md" in prompt
-    assert prompt.endswith("Do the task")
+    assert prompt == "Do the task"  # Pi doesn't touch the prompt
+    assert spec.setup_command is not None
+    assert "mkdir -p /home/node/.pi/agent/skills" in spec.setup_command
+    assert (
+        "cp -R /workspace/skills/add-operation /home/node/.pi/agent/skills/"
+    ) in spec.setup_command
+
+
+def test_install_skills_reflects_per_skill_source():
+    """Pi copies each skill from its own discovered source directory."""
+    spec, _ = Pi(_ANTHROPIC_CFG).install_skills(
+        _empty_spec(),
+        "Task",
+        "/tmp/x",
+        ["alpha", "beta"],
+        {"alpha": ".pi/skills", "beta": ".agents/skills"},
+    )
+    # Pin the exact name-to-source pairing, not just substring presence — a
+    # swapped mapping would otherwise still contain both source strings.
+    assert "cp -R /workspace/.pi/skills/alpha /home/node/.pi/agent/skills/" in (
+        spec.setup_command
+    )
+    assert "cp -R /workspace/.agents/skills/beta /home/node/.pi/agent/skills/" in (
+        spec.setup_command
+    )
 
 
 def test_install_skills_no_skills_returns_prompt_unchanged():
@@ -252,37 +366,143 @@ def test_install_skills_no_skills_returns_prompt_unchanged():
     assert prompt == "Do the task"
 
 
-def test_install_skills_multiple_skills(tmp_path):
-    for name, desc in [("skill-a", "First skill"), ("skill-b", "Second skill")]:
-        d = tmp_path / "skills" / name
-        d.mkdir(parents=True)
-        (d / "SKILL.md").write_text(f"---\ndescription: {desc}\n---\n")
-    _, prompt = Pi(_ANTHROPIC_CFG).install_skills(
+def test_install_skills_multiple_skills():
+    spec, _ = Pi(_ANTHROPIC_CFG).install_skills(
         _empty_spec(),
         "Task",
-        str(tmp_path),
+        "/tmp/x",
         ["skill-a", "skill-b"],
         {"skill-a": "skills", "skill-b": "skills"},
     )
-    assert "skill-a: First skill" in prompt
-    assert "skill-b: Second skill" in prompt
+    assert "cp -R /workspace/skills/skill-a /home/node/.pi/agent/skills/" in (
+        spec.setup_command
+    )
+    assert "cp -R /workspace/skills/skill-b /home/node/.pi/agent/skills/" in (
+        spec.setup_command
+    )
 
 
-def test_install_skills_advertises_per_skill_source(tmp_path):
-    """The in-container path reflects the source each skill was discovered in."""
-    claude = tmp_path / ".claude" / "skills" / "alpha"
-    claude.mkdir(parents=True)
-    (claude / "SKILL.md").write_text("---\ndescription: alpha skill\n---\n")
-    shared = tmp_path / ".agents" / "skills" / "beta"
-    shared.mkdir(parents=True)
-    (shared / "SKILL.md").write_text("---\ndescription: beta skill\n---\n")
+def test_install_skills_preserves_existing_setup():
+    """If build_spec set models.json setup, install_skills chains, not replaces."""
+    base = replace(_empty_spec(), setup_command="echo prelude")
+    spec, _ = Pi(_ANTHROPIC_CFG).install_skills(
+        base, "Task", "/tmp/x", ["s"], {"s": "skills"}
+    )
+    assert spec.setup_command.startswith("echo prelude && ")
+    assert "cp -R /workspace/skills/s /home/node/.pi/agent/skills/" in (
+        spec.setup_command
+    )
 
-    _, prompt = Pi(_ANTHROPIC_CFG).install_skills(
+
+def test_install_skills_chains_with_models_json_setup():
+    """End-to-end: build_spec sets models.json, install_skills appends skill copies."""
+    cfg = ModelConfig("ollama/qwen", base_url="http://host.docker.internal:11434/v1")
+    base = Pi(cfg).build_spec("Task", timeout=60)
+    assert "models.json" in base.setup_command  # precondition
+
+    spec, _ = Pi(cfg).install_skills(base, "Task", "/tmp/x", ["s"], {"s": "skills"})
+    assert "models.json" in spec.setup_command
+    skill_cp = "cp -R /workspace/skills/s /home/node/.pi/agent/skills/"
+    assert skill_cp in spec.setup_command
+    assert spec.setup_command.index("models.json") < spec.setup_command.index(skill_cp)
+
+
+def test_install_skills_warns_when_description_missing(tmp_path, caplog):
+    """Pi silently drops skills without a frontmatter description; the harness
+    must surface that on the host at install time."""
+    skill_dir = tmp_path / "skills" / "greet"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text("# greet\nJust a body, no frontmatter.\n")
+
+    with caplog.at_level("WARNING", logger="tea.agent.pi"):
+        Pi(_ANTHROPIC_CFG).install_skills(
+            _empty_spec(), "Task", str(tmp_path), ["greet"], {"greet": "skills"}
+        )
+    assert any("silently ignore this skill" in r.message for r in caplog.records)
+
+
+def test_install_skills_no_warning_with_description(tmp_path, caplog):
+    skill_dir = tmp_path / "skills" / "greet"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: greet\ndescription: How to greet.\n---\n# greet\n"
+    )
+
+    with caplog.at_level("WARNING", logger="tea.agent.pi"):
+        Pi(_ANTHROPIC_CFG).install_skills(
+            _empty_spec(), "Task", str(tmp_path), ["greet"], {"greet": "skills"}
+        )
+    assert not caplog.records
+
+
+@pytest.mark.parametrize(
+    "frontmatter",
+    [
+        'description: ""',  # empty quoted string — pi's YAML parse drops it
+        "description: How to: greet",  # unquoted colon — YAML parse error
+        "name: greet",  # description key absent entirely
+    ],
+)
+def test_install_skills_warns_on_pi_droppable_description(
+    tmp_path, caplog, frontmatter
+):
+    """The host warning must match Pi's real YAML accept/drop behavior, not a
+    naive line match."""
+    skill_dir = tmp_path / "skills" / "greet"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(f"---\n{frontmatter}\n---\n# greet\n")
+
+    with caplog.at_level("WARNING", logger="tea.agent.pi"):
+        Pi(_ANTHROPIC_CFG).install_skills(
+            _empty_spec(), "Task", str(tmp_path), ["greet"], {"greet": "skills"}
+        )
+    assert any("silently ignore this skill" in r.message for r in caplog.records)
+
+
+def test_install_skills_warns_on_unterminated_frontmatter(tmp_path, caplog):
+    """A frontmatter block that opens with '---' but never closes is not valid
+    frontmatter to Pi, so the skill is dropped — warn on it."""
+    skill_dir = tmp_path / "skills" / "greet"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text("---\ndescription: greet\n# greet body\n")
+
+    with caplog.at_level("WARNING", logger="tea.agent.pi"):
+        Pi(_ANTHROPIC_CFG).install_skills(
+            _empty_spec(), "Task", str(tmp_path), ["greet"], {"greet": "skills"}
+        )
+    assert any("silently ignore this skill" in r.message for r in caplog.records)
+
+
+def test_install_skills_warns_on_dot_prefixed_name(tmp_path, caplog):
+    """Pi skips dot-prefixed skill dirs; the harness must surface that."""
+    skill_dir = tmp_path / "skills" / ".internal"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text("---\ndescription: hidden.\n---\n# x\n")
+
+    with caplog.at_level("WARNING", logger="tea.agent.pi"):
+        Pi(_ANTHROPIC_CFG).install_skills(
+            _empty_spec(), "Task", str(tmp_path), [".internal"], {".internal": "skills"}
+        )
+    assert any("silently skipped by Pi" in r.message for r in caplog.records)
+
+
+@pytest.mark.parametrize("bad_name", ["../evil", "a/b", "..", ".", "a\\b"])
+def test_install_skills_rejects_path_traversal(bad_name):
+    with pytest.raises(ValueError, match="Invalid skill name"):
+        Pi(_ANTHROPIC_CFG).install_skills(
+            _empty_spec(), "Task", "/tmp/x", [bad_name], {bad_name: "skills"}
+        )
+
+
+def test_install_skills_skill_name_injection_is_quoted():
+    """shlex.quote prevents shell metacharacters in skill names from running."""
+    spec, _ = Pi(_ANTHROPIC_CFG).install_skills(
         _empty_spec(),
         "Task",
-        str(tmp_path),
-        ["alpha", "beta"],
-        {"alpha": ".pi/skills", "beta": ".agents/skills"},
+        "/tmp/x",
+        ["skill; echo hacked"],
+        {"skill; echo hacked": "skills"},
     )
-    assert ".pi/skills/alpha/SKILL.md" in prompt
-    assert ".agents/skills/beta/SKILL.md" in prompt
+    assert "'skill; echo hacked'" in spec.setup_command
+    sanitised = spec.setup_command.replace("'skill; echo hacked'", "SAFE")
+    assert "echo hacked" not in sanitised

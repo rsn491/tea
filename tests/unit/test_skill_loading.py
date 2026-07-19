@@ -21,6 +21,11 @@ from tea.executor.docker_executor import DockerExecutor
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 
+_PI_TEST_CFG = ModelConfig(
+    "anthropic/claude-sonnet-4-6", api_key_env="ANTHROPIC_API_KEY"
+)
+
+
 def _make_skill(workdir: str, name: str, content: str, *, skills_dir: str) -> None:
     skill_dir = os.path.join(workdir, skills_dir, name)
     os.makedirs(skill_dir, exist_ok=True)
@@ -220,16 +225,31 @@ def test_agent_install_skills_is_abstract():
 
 
 def test_harness_calls_install_skills_when_skills_and_workdir(tmp_path):
-    agent = _PromptCapturingAgent()
-    executor = _RecordingExecutor()
-    Harness(agent, executor)._execute(
+    calls: list[tuple[Any, ...]] = []
+
+    class _Counter(_PromptCapturingAgent):
+        def install_skills(self, spec, prompt, workdir, skills, source_for):
+            calls.append((spec, prompt, workdir, skills, source_for))
+            return spec, prompt
+
+    agent = _Counter()
+    Harness(agent, _RecordingExecutor())._execute(
         "base prompt",
         timeout=30,
         workdir=str(tmp_path),
         skills=["s"],
         source_for={"s": "skills"},
     )
-    assert agent.received_prompt == "base prompt"
+    # The point of this test is that the install_skills branch actually runs —
+    # received_prompt alone is set by build_spec regardless, so assert the call.
+    assert len(calls) == 1
+    _, prompt, workdir, skills, source_for = calls[0]
+    assert (prompt, workdir, skills, source_for) == (
+        "base prompt",
+        str(tmp_path),
+        ["s"],
+        {"s": "skills"},
+    )
 
 
 def test_harness_skips_install_skills_when_no_workdir():
@@ -540,31 +560,29 @@ def test_codex_skill_name_injection_is_quoted(monkeypatch):
     assert "echo hacked" not in sanitised
 
 
-# ── Pi.install_skills: prompt is the delivery channel for Pi ─────────────────
+# ── Pi.install_skills: copies into Pi's native discovery path ────────────────
 
 
-def test_pi_install_skills_modifies_prompt_not_spec(tmp_path):
+def test_pi_install_skills_copies_into_native_path():
+    """Pi auto-discovers skills from ~/.pi/agent/skills/<name>/SKILL.md.
+
+    See https://pi.dev/docs/latest/skills — directories containing SKILL.md
+    under ~/.pi/agent/skills/ are scanned recursively at startup.
+    """
     cfg = ModelConfig("anthropic/claude-sonnet-4-6", api_key_env="ANTHROPIC_API_KEY")
-    skill_dir = tmp_path / "skills" / "add-operation"
-    skill_dir.mkdir(parents=True)
-    (skill_dir / "SKILL.md").write_text(
-        "---\ndescription: How to add an operation\n---\n# body\n"
-    )
-
-    pi = Pi(cfg)
     base_spec = DockerSpec(command="noop", image="x")
-    spec, prompt = pi.install_skills(
+    spec, prompt = Pi(cfg).install_skills(
         base_spec,
         "Do the task",
-        str(tmp_path),
+        "/tmp/anywhere",
         ["add-operation"],
         {"add-operation": "skills"},
     )
-    assert spec is base_spec  # Pi delivers via prompt, not spec
-    assert "Available skills:" in prompt
-    assert "add-operation: How to add an operation" in prompt
-    assert "skills/add-operation/SKILL.md" in prompt
-    assert prompt.endswith("Do the task")
+    assert prompt == "Do the task"  # Pi doesn't touch the prompt
+    assert spec.setup_command is not None
+    assert (
+        "cp -R /workspace/skills/add-operation /home/node/.pi/agent/skills/"
+    ) in spec.setup_command
 
 
 # ── End-to-end RunBuilder behaviour ──────────────────────────────────────────
@@ -673,3 +691,55 @@ def test_run_builder_symlinked_skill_lands_as_real_file(tmp_path):
 
     assert seen["skills"] == ["extskill"]
     assert seen["skill_md_is_real"] is True
+
+
+def test_pi_harness_with_skills_runs_install_skills(tmp_path):
+    cfg = ModelConfig("anthropic/claude-sonnet-4-6", api_key_env="ANTHROPIC_API_KEY")
+    executor = _RecordingExecutor()
+    harness = Harness(Pi(cfg), executor)
+    _make_skill(str(tmp_path), "regression", "# any", skills_dir="skills")
+    harness._execute(
+        "hi",
+        timeout=30,
+        workdir=str(tmp_path),
+        skills=["regression"],
+        source_for={"regression": "skills"},
+    )
+    spec = executor.spec
+    assert isinstance(spec, DockerSpec)
+    assert spec.setup_command is not None
+    assert "cp -R /workspace/skills/regression /home/node/.pi/agent/skills/" in (
+        spec.setup_command
+    )
+
+
+def test_pi_skill_name_injection_is_quoted():
+    cfg = ModelConfig("anthropic/claude-sonnet-4-6", api_key_env="ANTHROPIC_API_KEY")
+    base = DockerSpec(command="noop", image="x")
+    spec, _ = Pi(cfg).install_skills(
+        base, "task", "/tmp/x", ["skill; echo hacked"], {"skill; echo hacked": "skills"}
+    )
+    assert spec.setup_command is not None
+    assert "'skill; echo hacked'" in spec.setup_command
+    sanitised = spec.setup_command.replace("'skill; echo hacked'", "SAFE")
+    assert "echo hacked" not in sanitised
+
+
+# ── path-traversal hardening on both Codex and Pi _skill_setup helpers ────────
+
+
+@pytest.mark.parametrize("agent_factory", [Codex, lambda: Pi(_PI_TEST_CFG)])
+@pytest.mark.parametrize("bad_name", ["../evil", "a/b", "..", ".", "a\\b"])
+def test_install_skills_rejects_path_traversal(agent_factory, bad_name, monkeypatch):
+    """A skill name containing path separators must be rejected by both agents.
+
+    shlex.quote protects the shell word but not the path semantics — a name
+    like "../evil" would still escape the destination directory once the
+    shell strips the quotes.
+    """
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    agent = agent_factory()
+    base = DockerSpec(command="noop", image="x")
+    with pytest.raises(ValueError, match="Invalid skill name"):
+        agent.install_skills(base, "task", "/tmp/x", [bad_name], {bad_name: "skills"})

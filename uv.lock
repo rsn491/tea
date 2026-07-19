@@ -3035,6 +3035,7 @@ source = { editable = "." }
 dependencies = [
     { name = "docker" },
     { name = "pydantic-ai" },
+    { name = "pyyaml" },
 ]
 
 [package.dev-dependencies]
@@ -3049,6 +3050,7 @@ dev = [
 requires-dist = [
     { name = "docker", specifier = ">=7.0" },
     { name = "pydantic-ai", specifier = ">=1.0" },
+    { name = "pyyaml", specifier = ">=6.0" },
 ]
 
 [package.metadata.requires-dev]
