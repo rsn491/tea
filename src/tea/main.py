@@ -34,17 +34,18 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: Sequence[str] | None = None) -> None:
+def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
     if args.target is None:
         parser.print_help()
-        return
+        return 0
 
     print_banner()
     try:
-        run(args.target, args.iterations, workers=args.workers)
+        ok = run(args.target, args.iterations, workers=args.workers)
     except KeyboardInterrupt:
         print("\nInterrupted.")
         sys.exit(130)
+    return 0 if ok else 1

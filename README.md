@@ -36,7 +36,7 @@ from tea import (
 )
 
 
-@iterations(2)
+@iterations(2, max_failures=1)
 def test_add_minus_operation():
     run = (
         Agents.ClaudeCode.prompt("Add 'minus' operation support to the calculator")
@@ -61,6 +61,11 @@ def test_add_minus_operation():
     )
 ```
 
+Agent runs are nondeterministic, so `@iterations(n)` runs a test `n` times.
+An iteration fails when any of its checks fail or the test raises. By default
+a single failed iteration fails the test; pass `max_failures=k` to tolerate
+flakiness — the test fails only if more than `k` iterations fail.
+
 ### Run tests
 
 ```bash
@@ -75,6 +80,15 @@ tea examples/demo_calculator/agent-tests/test_add_new_operation.py::test_add_min
 ```
 
 See [examples/demo_calculator/agent-tests](examples/demo_calculator/agent-tests) for runnable examples.
+
+### Exit codes
+
+`tea` is CI-friendly out of the box — run it as a pipeline step and the exit
+code gates the build:
+
+- `0` — all tests passed
+- `1` — at least one test failed (or no tests were found)
+- `130` — interrupted
 
 ## Checkers
 
