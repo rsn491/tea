@@ -207,8 +207,8 @@ class TestRunner:
                 print(f"  {_cyan('──')} {_dim(str(tc.path))}")
                 last_file = tc.path
             n = getattr(tc.fn, "_tea_iterations", self._iterations)
-            k = getattr(tc.fn, "_tea_max_failures", 0)
-            passed = self.run(tc.fn, iterations=n, max_failures=k)
+            max_failures = getattr(tc.fn, "_tea_max_failures", 0)
+            passed = self.run(tc.fn, iterations=n, max_failures=max_failures)
             ok = ok and passed
         return ok
 
@@ -235,8 +235,8 @@ class TestRunner:
             name = getattr(tc.fn, "__name__", repr(tc.fn))
             _on_start(name)
             n = getattr(tc.fn, "_tea_iterations", self._iterations)
-            k = getattr(tc.fn, "_tea_max_failures", 0)
-            return self.collect(tc.fn, iterations=n, max_failures=k)
+            max_failures = getattr(tc.fn, "_tea_max_failures", 0)
+            return self.collect(tc.fn, iterations=n, max_failures=max_failures)
 
         ok = True
         futures_map: dict[Future, TestCase] = {}
