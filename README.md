@@ -36,7 +36,7 @@ from tea import (
 )
 
 
-@iterations(2)
+@iterations(2, max_failures=1)
 def test_add_minus_operation():
     run = (
         Agents.ClaudeCode.prompt("Add 'minus' operation support to the calculator")

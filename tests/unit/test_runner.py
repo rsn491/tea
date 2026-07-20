@@ -113,6 +113,29 @@ def test_iterations_decorator_returns_original_callable():
     assert called == [True]
 
 
+def test_iterations_decorator_sets_max_failures():
+    @iterations(5, max_failures=2)
+    def test_foo():
+        pass
+
+    assert test_foo._tea_iterations == 5
+    assert test_foo._tea_max_failures == 2
+
+
+def test_iterations_decorator_defaults_max_failures_to_zero():
+    @iterations(3)
+    def test_foo():
+        pass
+
+    assert test_foo._tea_max_failures == 0
+
+
+@pytest.mark.parametrize("max_failures", [-1, 3, 4])
+def test_iterations_decorator_rejects_invalid_max_failures(max_failures):
+    with pytest.raises(ValueError, match="max_failures"):
+        iterations(3, max_failures=max_failures)
+
+
 # ── _discover_test_cases ──────────────────────────────────────────────────────
 
 
@@ -140,7 +163,7 @@ def test_discover_test_cases_from_directory(tmp_path):
 
 def test_run_one_iteration_calls_fn_once():
     calls = []
-    TestRunner._run_one_iteration(lambda: calls.append(1), [])
+    TestRunner._run_one_iteration(lambda: calls.append(1))
     assert calls == [1]
 
 
@@ -149,7 +172,7 @@ def test_run_one_iteration_resets_context_vars_after_run():
     c_token = _active_collector.set([sentinel])
     ch_token = _active_checks.set([])
     try:
-        TestRunner._run_one_iteration(lambda: None, [])
+        TestRunner._run_one_iteration(lambda: None)
         # After the iteration the context var must be restored to the outer value.
         assert _active_collector.get() == [sentinel]
     finally:
@@ -158,14 +181,16 @@ def test_run_one_iteration_resets_context_vars_after_run():
 
 
 def test_run_one_iteration_captures_exception_without_raising():
-    errors: list[Exception] = []
-
     def _raise():
         raise ValueError("boom")
 
-    TestRunner._run_one_iteration(_raise, errors)
-    assert len(errors) == 1
-    assert isinstance(errors[0], ValueError)
+    _, _, error = TestRunner._run_one_iteration(_raise)
+    assert isinstance(error, ValueError)
+
+
+def test_run_one_iteration_returns_none_error_on_success():
+    _, _, error = TestRunner._run_one_iteration(lambda: None)
+    assert error is None
 
 
 def test_run_one_iteration_returns_collector_and_checks():
@@ -173,7 +198,7 @@ def test_run_one_iteration_returns_collector_and_checks():
         _active_collector.get().append(_DUMMY_RUN)
         _active_checks.get().append(("my_check", True))
 
-    collector, checks = TestRunner._run_one_iteration(_fn, [])
+    collector, checks, _ = TestRunner._run_one_iteration(_fn)
     assert collector == [_DUMMY_RUN]
     assert checks == [("my_check", True)]
 
@@ -234,6 +259,72 @@ def test_collect_calls_on_iteration_callback():
     assert seen == [(0, 3), (1, 3), (2, 3)]
 
 
+# ── TestRunner.collect — failed_iterations / passed verdict ───────────────────
+
+
+def _failing_on_iterations(fail_on: set[int]):
+    """A test fn whose check fails on the given (0-based) iteration indices."""
+    i = -1
+
+    def _fn():
+        nonlocal i
+        i += 1
+        _active_checks.get().append(("label", i not in fail_on))
+
+    return _fn
+
+
+def test_collect_all_passing_iterations_gives_passing_verdict():
+    result = TestRunner().collect(_failing_on_iterations(set()), iterations=3)
+    assert result.failed_iterations == 0
+    assert result.passed
+
+
+def test_collect_any_failing_iteration_fails_by_default():
+    result = TestRunner().collect(_failing_on_iterations({1}), iterations=3)
+    assert result.failed_iterations == 1
+    assert not result.passed
+
+
+def test_collect_passes_with_exactly_max_failures_failed_iterations():
+    result = TestRunner().collect(
+        _failing_on_iterations({0, 2}), iterations=5, max_failures=2
+    )
+    assert result.failed_iterations == 2
+    assert result.passed
+
+
+def test_collect_fails_with_more_than_max_failures_failed_iterations():
+    result = TestRunner().collect(
+        _failing_on_iterations({0, 2, 4}), iterations=5, max_failures=2
+    )
+    assert result.failed_iterations == 3
+    assert not result.passed
+
+
+def test_collect_counts_exception_as_failed_iteration():
+    i = -1
+
+    def _fn():
+        nonlocal i
+        i += 1
+        if i == 1:
+            raise RuntimeError("boom")
+
+    result = TestRunner().collect(_fn, iterations=3)
+    assert result.failed_iterations == 1
+    assert not result.passed
+
+
+def test_collect_counts_failing_check_plus_exception_as_one_failed_iteration():
+    def _fn():
+        _active_checks.get().append(("label", False))
+        raise RuntimeError("boom")
+
+    result = TestRunner().collect(_fn, iterations=1)
+    assert result.failed_iterations == 1
+
+
 # ── TestRunner.run_all — sequential (workers=1) ───────────────────────────────
 
 
@@ -271,6 +362,66 @@ def test_run_all_sequential_respects_tea_iterations():
         for p in patches:
             p.stop()
     assert calls == [1, 1, 1]
+
+
+def test_run_all_sequential_returns_true_when_all_pass():
+    cases = [
+        TestCase(Path("test_x.py"), lambda: None),
+        TestCase(Path("test_x.py"), lambda: None),
+    ]
+    patches = _patch_tui()
+    for p in patches:
+        p.start()
+    try:
+        assert TestRunner(workers=1).run_all(cases) is True
+    finally:
+        for p in patches:
+            p.stop()
+
+
+def test_run_all_sequential_returns_false_and_keeps_running_after_failure():
+    calls = []
+
+    def _failing():
+        _active_checks.get().append(("c", False))
+
+    def _passing():
+        calls.append(1)
+
+    cases = [
+        TestCase(Path("test_x.py"), _failing),
+        TestCase(Path("test_x.py"), _passing),
+    ]
+    patches = _patch_tui()
+    for p in patches:
+        p.start()
+    try:
+        assert TestRunner(workers=1).run_all(cases) is False
+    finally:
+        for p in patches:
+            p.stop()
+    assert calls == [1]
+
+
+def test_run_all_sequential_respects_tea_max_failures():
+    i = -1
+
+    def _fn():
+        nonlocal i
+        i += 1
+        _active_checks.get().append(("c", i != 0))
+
+    _fn._tea_iterations = 3
+    _fn._tea_max_failures = 1
+    cases = [TestCase(Path("test_x.py"), _fn)]
+    patches = _patch_tui()
+    for p in patches:
+        p.start()
+    try:
+        assert TestRunner(workers=1).run_all(cases) is True
+    finally:
+        for p in patches:
+            p.stop()
 
 
 # ── TestRunner.run_all — parallel (workers>1) ────────────────────────────────
@@ -324,6 +475,55 @@ def test_run_all_parallel_respects_tea_iterations():
         for p in patches:
             p.stop()
     assert calls == [1, 1]
+
+
+def test_run_all_parallel_returns_true_when_all_pass():
+    def _fn():
+        pass
+
+    _fn.__name__ = "test_fn"
+    cases = [TestCase(Path("test_x.py"), _fn)]
+    patches = _patch_tui()
+    for p in patches:
+        p.start()
+    try:
+        assert TestRunner(workers=2).run_all(cases) is True
+    finally:
+        for p in patches:
+            p.stop()
+
+
+def test_run_all_parallel_returns_false_when_a_test_fails():
+    def _fn():
+        _active_checks.get().append(("c", False))
+
+    _fn.__name__ = "test_fn"
+    cases = [TestCase(Path("test_x.py"), _fn)]
+    patches = _patch_tui()
+    for p in patches:
+        p.start()
+    try:
+        assert TestRunner(workers=2).run_all(cases) is False
+    finally:
+        for p in patches:
+            p.stop()
+
+
+def test_run_all_parallel_returns_false_when_a_worker_crashes():
+    def _fn():
+        pass
+
+    _fn.__name__ = "test_fn"
+    cases = [TestCase(Path("test_x.py"), _fn)]
+    patches = _patch_tui()
+    for p in patches:
+        p.start()
+    try:
+        with patch.object(TestRunner, "collect", side_effect=RuntimeError("boom")):
+            assert TestRunner(workers=2).run_all(cases) is False
+    finally:
+        for p in patches:
+            p.stop()
 
 
 # ── load_module (existing error-path tests kept here for completeness) ─────────

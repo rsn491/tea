@@ -16,6 +16,8 @@ def print_test_results(
     all_runs: list[AgentRun],
     run_errors: list[Exception],
     iterations: int,
+    failed_iterations: int = 0,
+    max_failures: int = 0,
 ) -> None:
     for check_label, results in check_results.items():
         passes = sum(results)
@@ -60,6 +62,17 @@ def print_test_results(
         )
 
     print(_row(" ", _dim("iterations"), _dim(str(iterations))))
+
+    if max_failures:
+        sym = _PASS if failed_iterations <= max_failures else _FAIL
+        print(
+            _row(
+                sym,
+                "verdict",
+                f"{failed_iterations} failed iteration(s)"
+                f" (max_failures={max_failures})",
+            )
+        )
 
     if run_errors:
         print(

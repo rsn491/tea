@@ -33,6 +33,12 @@ class _CollectResult:
     all_runs: list[AgentRun] = field(default_factory=list)
     run_errors: list[Exception] = field(default_factory=list)
     iterations: int = 0
+    failed_iterations: int = 0
+    max_failures: int = 0
+
+    @property
+    def passed(self) -> bool:
+        return self.failed_iterations <= self.max_failures
 
 
 def discover_test_files(path: Path) -> list[Path]:
@@ -82,19 +88,30 @@ def _discover_test_cases(target: str) -> list[TestCase]:
     ]
 
 
-def run(target: str, default_iterations: int = 1, workers: int = 1) -> None:
+def run(target: str, default_iterations: int = 1, workers: int = 1) -> bool:
     test_cases = _discover_test_cases(target)
     if not test_cases:
         print(f"tea: no tests found in '{target}'")
         sys.exit(1)
-    TestRunner(iterations=default_iterations, workers=workers).run_all(test_cases)
+    return TestRunner(iterations=default_iterations, workers=workers).run_all(
+        test_cases
+    )
 
 
-def iterations(n: int) -> Callable:
-    """Decorator to set the default iteration count for a test function."""
+def iterations(n: int, max_failures: int = 0) -> Callable:
+    """Decorator to set the iteration count and failure tolerance for a test.
+
+    The test fails only if more than `max_failures` iterations fail.
+    """
+    if not 0 <= max_failures < n:
+        raise ValueError(
+            "max_failures must satisfy 0 <= max_failures < n "
+            f"(got n={n}, max_failures={max_failures})"
+        )
 
     def decorator(fn: Callable) -> Callable:
         fn._tea_iterations = n
+        fn._tea_max_failures = max_failures
         return fn
 
     return decorator
@@ -105,7 +122,12 @@ class TestRunner:
         self._iterations = iterations
         self._workers = workers
 
-    def run(self, test_fn: Callable[[], None], iterations: int | None = None) -> None:
+    def run(
+        self,
+        test_fn: Callable[[], None],
+        iterations: int | None = None,
+        max_failures: int = 0,
+    ) -> bool:
         n = iterations if iterations is not None else self._iterations
         name = getattr(test_fn, "__name__", repr(test_fn))
         with _Spinner(f"{name} — iteration 1/{n}") as spinner:
@@ -115,8 +137,10 @@ class TestRunner:
                     f"{name} — iteration {i + 1}/{_n}"
                 ),
                 iterations=n,
+                max_failures=max_failures,
             )
         self._report(name, result)
+        return result.passed
 
     @staticmethod
     def _report(name: str, result: _CollectResult) -> None:
@@ -126,58 +150,69 @@ class TestRunner:
             result.all_runs,
             result.run_errors,
             result.iterations,
+            failed_iterations=result.failed_iterations,
+            max_failures=result.max_failures,
         )
 
-    def run_all(self, test_cases: list[TestCase]) -> None:
+    def run_all(self, test_cases: list[TestCase]) -> bool:
         if self._workers <= 1:
-            self._run_sequential(test_cases)
-        else:
-            self._run_parallel(test_cases)
+            return self._run_sequential(test_cases)
+        return self._run_parallel(test_cases)
 
     def collect(
         self,
         test_fn: Callable[[], None],
         on_iteration: Callable[[int, int], None] | None = None,
         iterations: int | None = None,
+        max_failures: int = 0,
     ) -> _CollectResult:
         n = iterations if iterations is not None else self._iterations
-        result = _CollectResult(iterations=n)
+        result = _CollectResult(iterations=n, max_failures=max_failures)
         for i in range(n):
             if on_iteration is not None:
                 on_iteration(i, n)
-            collector, checks = self._run_one_iteration(test_fn, result.run_errors)
+            collector, checks, error = self._run_one_iteration(test_fn)
+            if error is not None:
+                result.run_errors.append(error)
             result.all_runs.extend(collector)
             for label, passed in checks:
                 result.check_results[label].append(passed)
+            if error is not None or any(not passed for _, passed in checks):
+                result.failed_iterations += 1
         return result
 
     @staticmethod
     def _run_one_iteration(
-        test_fn: Callable[[], None], run_errors: list[Exception]
-    ) -> tuple[list[AgentRun], list[tuple[str, bool]]]:
+        test_fn: Callable[[], None],
+    ) -> tuple[list[AgentRun], list[tuple[str, bool]], Exception | None]:
         collector: list[AgentRun] = []
         checks: list[tuple[str, bool]] = []
+        error: Exception | None = None
         c_token = _active_collector.set(collector)
         ch_token = _active_checks.set(checks)
         try:
             test_fn()
         except Exception as e:
-            run_errors.append(e)
+            error = e
         finally:
             _active_collector.reset(c_token)
             _active_checks.reset(ch_token)
-        return collector, checks
+        return collector, checks, error
 
-    def _run_sequential(self, test_cases: list[TestCase]) -> None:
+    def _run_sequential(self, test_cases: list[TestCase]) -> bool:
+        ok = True
         last_file: Path | None = None
         for tc in test_cases:
             if tc.path != last_file:
                 print(f"  {_cyan('──')} {_dim(str(tc.path))}")
                 last_file = tc.path
             n = getattr(tc.fn, "_tea_iterations", self._iterations)
-            self.run(tc.fn, iterations=n)
+            max_failures = getattr(tc.fn, "_tea_max_failures", 0)
+            passed = self.run(tc.fn, iterations=n, max_failures=max_failures)
+            ok = ok and passed
+        return ok
 
-    def _run_parallel(self, test_cases: list[TestCase]) -> None:
+    def _run_parallel(self, test_cases: list[TestCase]) -> bool:
         total = len(test_cases)
         workers = self._workers
         print(f"  {_cyan('──')} running {total} test(s) with {workers} worker(s)\n")
@@ -200,8 +235,10 @@ class TestRunner:
             name = getattr(tc.fn, "__name__", repr(tc.fn))
             _on_start(name)
             n = getattr(tc.fn, "_tea_iterations", self._iterations)
-            return self.collect(tc.fn, iterations=n)
+            max_failures = getattr(tc.fn, "_tea_max_failures", 0)
+            return self.collect(tc.fn, iterations=n, max_failures=max_failures)
 
+        ok = True
         futures_map: dict[Future, TestCase] = {}
         executor = ThreadPoolExecutor(max_workers=self._workers)
         try:
@@ -226,9 +263,12 @@ class TestRunner:
                             last_file = tc.path
                         exc = fut.exception()
                         if exc:
+                            ok = False
                             print(f"\n  {_bold_cyan(name)}\n  error: {exc}\n")
                         else:
-                            self._report(name, fut.result())
+                            result = fut.result()
+                            self._report(name, result)
+                            ok = ok and result.passed
 
         except KeyboardInterrupt:
             Docker.get().shutdown()
@@ -236,3 +276,4 @@ class TestRunner:
             raise
         else:
             executor.shutdown(wait=True)
+            return ok

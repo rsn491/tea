@@ -8,7 +8,8 @@ from tea import (
 )
 
 
-@iterations(2)
+# Tolerate one flaky iteration: the test fails only if both iterations fail.
+@iterations(2, max_failures=1)
 def test_add_minus_operation():
     run = (
         Agents.ClaudeCode.prompt("Add 'minus' operation support to the calculator")
