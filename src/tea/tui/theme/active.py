@@ -27,7 +27,8 @@ def active_theme() -> type[Theme]:
 def resolve_mode(flag: str | None = None) -> Mode:
     """Pick the mode: --theme flag > TEA_THEME env > default 'dark'.
 
-    An unknown value warns once and falls back to the default.
+    Each source is tried in precedence order; an unknown value warns and falls
+    through to the next source, so a bad flag never masks a valid TEA_THEME.
     """
     for source in (flag, os.environ.get("TEA_THEME")):
         if source is None:
@@ -36,7 +37,6 @@ def resolve_mode(flag: str | None = None) -> Mode:
         if value in _VALID:
             return value  # type: ignore[return-value]
         print(f"tea: unknown theme {source!r}; using {_DEFAULT!r}", file=sys.stderr)
-        return _DEFAULT
     return _DEFAULT
 
 

@@ -1,15 +1,12 @@
 from __future__ import annotations
 
 import abc
-import os
-
-_NO_SPINNER = os.environ.get("NO_SPINNER") is not None
 
 
 class Theme(abc.ABC):
     """Abstract base class for tea color themes.
 
-    Subclass and implement all four classmethods to define a custom palette.
+    Subclass and implement all abstract classmethods to define a custom palette.
     """
 
     @classmethod

@@ -5,7 +5,8 @@ import itertools
 import sys
 import threading
 
-from .theme import _NO_SPINNER, _TTY, primary
+from .theme import primary
+from .utils import _NO_SPINNER, _TTY
 
 
 class _Spinner:
