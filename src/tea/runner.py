@@ -12,8 +12,10 @@ from typing import Callable
 
 from tea._context import _active_checks, _active_collector
 from tea.agent.agent_run import AgentRun
+from tea.baseline import Baseline, TestSummary
 from tea.infra.docker import Docker
 from tea.tui import _bold_cyan, _cyan, _dim, _Spinner
+from tea.tui.baseline_view import BaselineComparisonView
 from tea.tui.runner_view import print_test_header, print_test_results
 
 
@@ -88,14 +90,28 @@ def _discover_test_cases(target: str) -> list[TestCase]:
     ]
 
 
-def run(target: str, default_iterations: int = 1, workers: int = 1) -> bool:
+def run(
+    target: str,
+    default_iterations: int = 1,
+    workers: int = 1,
+    summary_export: str | None = None,
+    baseline: str | None = None,
+) -> bool:
     test_cases = _discover_test_cases(target)
     if not test_cases:
         print(f"tea: no tests found in '{target}'")
         sys.exit(1)
-    return TestRunner(iterations=default_iterations, workers=workers).run_all(
-        test_cases
-    )
+    runner = TestRunner(iterations=default_iterations, workers=workers)
+    ok = runner.run_all(test_cases)
+
+    current = Baseline(runner.summaries)
+    if summary_export:
+        current.write(Path(summary_export))
+    if baseline:
+        previous = Baseline.load(Path(baseline))
+        BaselineComparisonView(current.compare(previous)).render()
+
+    return ok
 
 
 def iterations(n: int, max_failures: int = 0) -> Callable:
@@ -121,6 +137,11 @@ class TestRunner:
     def __init__(self, iterations: int = 1, workers: int = 1) -> None:
         self._iterations = iterations
         self._workers = workers
+        self._summaries: dict[str, TestSummary] = {}
+
+    @property
+    def summaries(self) -> dict[str, TestSummary]:
+        return self._summaries
 
     def run(
         self,
@@ -142,8 +163,8 @@ class TestRunner:
         self._report(name, result)
         return result.passed
 
-    @staticmethod
-    def _report(name: str, result: _CollectResult) -> None:
+    def _report(self, name: str, result: _CollectResult) -> None:
+        self._summaries[name] = TestSummary.from_result(result)
         print_test_header(name, result.iterations)
         print_test_results(
             result.check_results,
