@@ -72,6 +72,11 @@ class RunBuilder:
             # the bind mount, since symlink targets outside the workdir would
             # be unreachable inside the container.
             shutil.copytree(self._workdir, tmp_dir, dirs_exist_ok=True)
+            # The container user (e.g. "node") rarely matches the host user
+            # (e.g. root in CI), and mkdtemp creates the copy 0o700 — open it
+            # up so the bind-mounted workdir is readable and writable inside
+            # the container regardless of uid mapping.
+            _open_permissions(tmp_dir)
         effective_workdir = tmp_dir if tmp_dir else self._workdir
         sources = _resolve_skill_sources(
             self._skills_sources, self._defaults, effective_workdir
@@ -101,6 +106,18 @@ class RunBuilder:
 
 
 # helpers
+
+
+def _open_permissions(root: str) -> None:
+    """Make every dir traversable/writable and every file readable by any uid."""
+    os.chmod(root, 0o777)
+    for dirpath, dirnames, filenames in os.walk(root):
+        for name in dirnames:
+            path = os.path.join(dirpath, name)
+            os.chmod(path, os.stat(path).st_mode | 0o777)
+        for name in filenames:
+            path = os.path.join(dirpath, name)
+            os.chmod(path, os.stat(path).st_mode | 0o666)
 
 
 def _resolve_skill_sources(

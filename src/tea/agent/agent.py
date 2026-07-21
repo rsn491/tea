@@ -24,7 +24,8 @@ class Agent(ABC):
         """Return the CLI tool version this agent will run inside Docker.
 
         Resolution is agent-specific (env var override → CLI probe → npm → fallback).
-        Called lazily by ``build_spec()`` to build a versioned image tag.
+        Used by each agent's Docker profile factory to build a versioned image
+        tag, and available to callers as run metadata.
         """
         ...
 

@@ -656,6 +656,34 @@ def test_run_builder_symlinked_skill_lands_as_real_file(tmp_path):
     assert seen["skill_md_is_real"] is True
 
 
+def test_run_builder_workdir_copy_is_world_accessible(tmp_path):
+    """The tmp workdir copy must be usable by the container user even when it
+    differs from the host user (mkdtemp alone yields an untraversable 0o700)."""
+    sub = tmp_path / "sub"
+    sub.mkdir()
+    (sub / "file.txt").write_text("x")
+
+    seen: dict[str, int] = {}
+
+    @dataclass
+    class _StatExecutor(Executor):
+        def run(self, spec: ExecutionSpec, workdir: str | None) -> RawResult:
+            seen["root"] = os.stat(workdir).st_mode & 0o777
+            seen["dir"] = os.stat(os.path.join(workdir, "sub")).st_mode & 0o777
+            seen["file"] = (
+                os.stat(os.path.join(workdir, "sub", "file.txt")).st_mode & 0o777
+            )
+            return RawResult("", "", 0, 0.0)
+
+    Harness(_PromptCapturingAgent(), _StatExecutor()).prompt("p").workdir(
+        str(tmp_path)
+    ).run()
+
+    assert seen["root"] == 0o777
+    assert seen["dir"] & 0o007 == 0o007  # world rwx on dirs
+    assert seen["file"] & 0o006 == 0o006  # world rw on files
+
+
 def test_pi_harness_with_skills_runs_install_skills(tmp_path):
     cfg = PiConfig("anthropic/claude-sonnet-4-6", api_key_env="ANTHROPIC_API_KEY")
     executor = _RecordingExecutor()
