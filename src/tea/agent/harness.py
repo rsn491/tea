@@ -5,11 +5,12 @@ from abc import ABC, abstractmethod
 from tea.executor import Executor
 
 from .agent import Agent
-from .agent_run import AgentRun
 from .run_builder import RunBuilder
 
 
 class Harness:
+    """An assembled (agent, executor) pair ready to receive prompts."""
+
     def __init__(
         self,
         agent: Agent,
@@ -32,23 +33,6 @@ class Harness:
 
     def prompt(self, text: str, *, timeout: int = 300) -> RunBuilder:
         return RunBuilder.prompt(self, text, timeout=timeout)
-
-    def _execute(
-        self,
-        text: str,
-        *,
-        timeout: int,
-        workdir: str | None,
-        skills: list[str] = (),
-        source_for: dict[str, str] | None = None,
-    ) -> AgentRun:
-        spec = self._agent.build_spec(text, timeout)
-        if skills and workdir:
-            spec, text = self._agent.install_skills(
-                spec, text, workdir, list(skills), dict(source_for or {})
-            )
-        raw = self._executor.run(spec, workdir)
-        return self._agent.parse(raw)
 
 
 class ApiKeyHarness(Harness, ABC):

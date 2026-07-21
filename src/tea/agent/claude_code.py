@@ -5,8 +5,12 @@ import os
 import shlex
 from dataclasses import replace
 
-from tea.executor import DockerSpec, RawResult
-from tea.executor.docker_executor import DockerExecutor
+from tea.executor import (
+    ExecutionRequirements,
+    ExecutionSpec,
+    RawResult,
+)
+from tea.executor.docker_executor import DockerExecutor, DockerProfile
 
 from ._utils import _sanitize_env_value
 from ._version import resolve_cli_version
@@ -19,11 +23,41 @@ _CLAUDE_CODE_PACKAGE = "@anthropic-ai/claude-code"
 _CLAUDE_CODE_VERSION_ENV = "CLAUDE_CODE_VERSION"
 _DEFAULT_MAX_TURNS = 25
 _DEFAULT_MODEL = "claude-haiku-4-5-20251001"
+_NPM_PREFIX = "/home/node/.npm-global"
 
 # DockerExecutor mounts the workdir at this path; install_skills relies on it.
 _CONTAINER_WORKDIR = "/workspace"
 # Where Claude Code's CLI looks for project skills inside the container cwd.
 _CLAUDE_NATIVE_PROJECT_SKILLS = ".claude/skills"
+
+
+def _resolve_version() -> str:
+    return resolve_cli_version(
+        "claude --version", _CLAUDE_CODE_PACKAGE, _CLAUDE_CODE_VERSION_ENV
+    )
+
+
+def _dockerfile(version: str) -> str:
+    return (
+        f"FROM node:{_NODE_VERSION}\n"
+        f"ENV NPM_CONFIG_PREFIX={_NPM_PREFIX}\n"
+        f"RUN npm install -g {_CLAUDE_CODE_PACKAGE}@{version} --quiet 2>/dev/null\n"
+    )
+
+
+def _claude_docker_profile() -> DockerProfile:
+    """Static Docker knowledge for Claude Code, resolved lazily.
+
+    A callable (not a constant) so the version probe — a subprocess — runs at
+    execution time, never at import time.
+    """
+    version = _resolve_version()
+    return DockerProfile(
+        image=f"tea-claude-code:{version}",
+        dockerfile=_dockerfile(version),
+        user="node",
+        env_overrides={"HOME": "/home/node", "NPM_CONFIG_PREFIX": _NPM_PREFIX},
+    )
 
 
 class ClaudeCode(Agent):
@@ -49,45 +83,37 @@ class ClaudeCode(Agent):
     def max_turns(self) -> int:
         return self._max_turns
 
-    def build_spec(self, prompt: str, timeout: int) -> DockerSpec:
-        npm_prefix = "/home/node/.npm-global"
-        env: dict[str, str] = {"HOME": "/home/node", "NPM_CONFIG_PREFIX": npm_prefix}
+    def build_spec(self, prompt: str, timeout: int) -> ExecutionSpec:
+        env: dict[str, str] = {}
         if key := os.environ.get("ANTHROPIC_API_KEY"):
             env["ANTHROPIC_API_KEY"] = key
         if token := os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"):
             env["CLAUDE_CODE_OAUTH_TOKEN"] = token
 
-        extra_volumes: dict[str, str] = {}
-        extra_volumes.update(self._extra_volumes)
-
-        version = self.version()
-        image = f"tea-claude-code:{version}"
-
         env["CLAUDE_PROMPT"] = _sanitize_env_value(prompt)
 
-        return DockerSpec(
+        return ExecutionSpec(
             command=(
-                f"{npm_prefix}/bin/claude --dangerously-skip-permissions"
+                f"{_NPM_PREFIX}/bin/claude --dangerously-skip-permissions"
                 f" --model {shlex.quote(self._model)}"
                 f" --max-turns {int(self._max_turns)}"
                 ' --print --output-format stream-json --verbose "$CLAUDE_PROMPT"'
             ),
-            dockerfile=self._dockerfile(version),
             env=env,
-            image=image,
-            user="node",
             timeout=timeout,
-            extra_volumes=extra_volumes,
+            requirements=ExecutionRequirements(
+                extra_mounts=dict(self._extra_volumes)
+            ),
         )
 
     def install_skills(
         self,
-        spec: DockerSpec,
+        spec: ExecutionSpec,
         prompt: str,
         workdir: str,
         skills: list[str],
         source_for: dict[str, str],
-    ) -> tuple[DockerSpec, str]:
+    ) -> tuple[ExecutionSpec, str]:
         """Materialise skills into ``/workspace/.claude/skills/`` for Claude Code.
 
         Claude Code's CLI auto-discovers project skills from ``<cwd>/.claude/skills/``.
@@ -113,17 +139,8 @@ class ClaudeCode(Agent):
         )
         return replace(spec, setup_command=merged), prompt
 
-    def _dockerfile(self, version: str) -> str:
-        return (
-            f"FROM node:{_NODE_VERSION}\n"
-            "ENV NPM_CONFIG_PREFIX=/home/node/.npm-global\n"
-            f"RUN npm install -g {_CLAUDE_CODE_PACKAGE}@{version} --quiet 2>/dev/null\n"
-        )
-
     def version(self) -> str:
-        return resolve_cli_version(
-            "claude --version", _CLAUDE_CODE_PACKAGE, _CLAUDE_CODE_VERSION_ENV
-        )
+        return _resolve_version()
 
     def parse(self, raw: RawResult) -> AgentRun:
         run = self._parse(raw.stdout)
@@ -199,6 +216,17 @@ class ClaudeCode(Agent):
 
 
 class ClaudeCodeHarness(ApiKeyHarness):
+    def with_model(self, model: str) -> Harness:
+        agent = self._agent
+        max_turns = (
+            agent.max_turns if isinstance(agent, ClaudeCode) else _DEFAULT_MAX_TURNS
+        )
+        return Harness(
+            ClaudeCode(model=model, max_turns=max_turns),
+            DockerExecutor(_claude_docker_profile),
+            skills_sources=self.skills_sources,
+        )
+
     def with_api_key(self) -> Harness:
         agent = self._agent
         model = agent.model if isinstance(agent, ClaudeCode) else _DEFAULT_MODEL
@@ -207,6 +235,6 @@ class ClaudeCodeHarness(ApiKeyHarness):
         )
         return Harness(
             ClaudeCode(model=model, max_turns=max_turns),
-            DockerExecutor(),
+            DockerExecutor(_claude_docker_profile),
             skills_sources=self.skills_sources,
         )

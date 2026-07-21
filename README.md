@@ -119,12 +119,12 @@ Setup `OPENAI_API_KEY` (API-key auth) and construct the harness with
 
 ### Pi
 
-Pi requires a `ModelConfig`:
+Pi requires a `PiConfig`:
 
 ```python
-from tea.agent import ModelConfig
+from tea.agent import PiConfig
 
-Agents.Pi.with_model(ModelConfig(
+Agents.Pi.with_model(PiConfig(
     model="ollama/qwen2.5-coder:1.5b",  # required
     api_key_env="MY_API_KEY",           # host env var forwarded into container
     base_url="http://localhost:11434",  # OpenAI-compatible endpoint

@@ -58,7 +58,7 @@ Harness
 ├── Agent (ABC)        agent/agent.py
 │    └── ClaudeCode    agent/claude_code.py   — builds Docker command, parses stream-json output
 └── Executor (ABC)     executor/executor.py
-     └── DockerExecutor executor/docker.py    — runs the command in a container, returns stdout/stderr
+     └── DockerExecutor executor/docker_executor.py — runs the command in a container (per-agent DockerProfile), returns stdout/stderr
 ```
 
 `Agent.build_spec()` returns an `ExecutionSpec`; `Executor.run()` consumes it and

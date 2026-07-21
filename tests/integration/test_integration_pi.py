@@ -19,7 +19,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import docker
 import pytest
 
-from tea import Agents, ModelConfig
+from tea import Agents, PiConfig
 from tea.agent.agent_run import AgentRun
 
 _SKILL_MD = (
@@ -51,10 +51,10 @@ def _ollama_available() -> bool:
         return False
 
 
-_ANTHROPIC_MODEL = ModelConfig(
+_ANTHROPIC_MODEL = PiConfig(
     "anthropic/claude-sonnet-4-6", api_key_env="ANTHROPIC_API_KEY"
 )
-_OLLAMA_MODEL = ModelConfig(
+_OLLAMA_MODEL = PiConfig(
     "ollama/llama3.2:latest",
     base_url="http://host.docker.internal:11434/v1",
 )
@@ -179,7 +179,7 @@ class _MockOpenAIServer:
 def test_pi_end_to_end_with_mock_provider():
     """Full pipeline: Docker image, models.json setup, model call, JSON parse."""
     with _MockOpenAIServer() as mock:
-        cfg = ModelConfig(
+        cfg = PiConfig(
             "mock/test-model",
             base_url=f"http://host.docker.internal:{mock.port}/v1",
         )
@@ -203,7 +203,7 @@ def test_pi_surfaces_model_call_failure():
     harness has to detect the stopReason=error events and surface a non-zero
     exit. Point the provider at a closed port to force the failure end-to-end.
     """
-    cfg = ModelConfig(
+    cfg = PiConfig(
         "mock/test-model",
         # 9 is the discard port — reliably refuses inside the container.
         base_url="http://host.docker.internal:9/v1",
@@ -231,7 +231,7 @@ def test_pi_skill_reaches_system_prompt_via_native_discovery(tmp_path):
     """
     _write_skill(tmp_path)
     with _MockOpenAIServer() as mock:
-        cfg = ModelConfig(
+        cfg = PiConfig(
             "mock/test-model",
             base_url=f"http://host.docker.internal:{mock.port}/v1",
         )
@@ -250,8 +250,13 @@ def test_pi_skill_reaches_system_prompt_via_native_discovery(tmp_path):
     )
     assert "greet" in system
     assert "How to greet the user" in system, "skill description missing"
-    assert "/home/node/.pi/agent/skills/greet/SKILL.md" in system, (
-        "skill not loaded from Pi's native user-scope path"
+    # The harness relocates Pi's agent dir into a ConfigScope mount, so the
+    # user-scope skill copy lives under $PI_CODING_AGENT_DIR/skills/.
+    assert "/skills/greet/SKILL.md" in system, (
+        "skill not loaded from Pi's user-scope path"
+    )
+    assert "/workspace/.pi/skills/greet/SKILL.md" not in system, (
+        "skill must come from the user-scope copy, not the untrusted project path"
     )
     # Native discovery replaced the old prompt-preamble approach: the user
     # message must be exactly the prompt, with no injected skill listing.

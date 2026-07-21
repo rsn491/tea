@@ -5,6 +5,7 @@ import json
 from tea.agent.codex import (
     Codex,
     CodexHarness,
+    _codex_docker_profile,
     _parse,
 )
 from tea.agent.harness import ApiKeyHarness
@@ -15,7 +16,7 @@ from tea.executor.docker_executor import DockerExecutor
 def test_codex_harness_uses_api_key_factory():
     # CodexHarness adopts the shared ApiKeyHarness ABC so its auth construction
     # is explicit and mirrors the contract other code-agents follow.
-    harness = CodexHarness(Codex(), DockerExecutor())
+    harness = CodexHarness(Codex(), DockerExecutor(_codex_docker_profile))
     assert isinstance(harness, ApiKeyHarness)
 
 
@@ -227,24 +228,26 @@ def test_build_spec_no_setup_command_without_skills(monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     spec = Codex().build_spec("task", 60)
     assert spec.setup_command is None
-    assert spec.extra_volumes == {}
+    assert spec.requirements.extra_mounts == {}
 
 
 def test_with_api_key_defaults_to_default_model():
-    harness = CodexHarness(Codex(), DockerExecutor()).with_api_key()
+    harness = CodexHarness(
+        Codex(), DockerExecutor(_codex_docker_profile)
+    ).with_api_key()
     assert isinstance(harness._agent, Codex)
     assert harness._agent.model == "gpt-5.2-codex"
 
 
 def test_with_api_key_preserves_explicit_model():
     harness = CodexHarness(
-        Codex(model="gpt-5.2-codex-spark"), DockerExecutor()
+        Codex(model="gpt-5.2-codex-spark"), DockerExecutor(_codex_docker_profile)
     ).with_api_key()
     assert harness._agent.model == "gpt-5.2-codex-spark"
 
 
 def test_with_api_key_preserves_skills_sources():
     harness = CodexHarness(
-        Codex(), DockerExecutor(), skills_sources=["custom/skills"]
+        Codex(), DockerExecutor(_codex_docker_profile), skills_sources=["custom/skills"]
     ).with_api_key()
     assert harness.skills_sources == ["custom/skills"]

@@ -4,102 +4,148 @@ import json
 import logging
 import os
 import shlex
-from dataclasses import replace
+from dataclasses import dataclass, replace
 
 import yaml
 
-from tea.executor import DockerSpec, RawResult
-from tea.executor.docker_executor import DockerExecutor
+from tea.executor import (
+    ConfigScope,
+    ExecutionRequirements,
+    ExecutionSpec,
+    RawResult,
+)
+from tea.executor.docker_executor import DockerExecutor, DockerProfile
 
 from ._utils import _sanitize_env_value
 from ._version import resolve_cli_version
 from .agent import Agent
 from .agent_run import AgentRun, Step, StepType, ToolCall
 from .harness import Harness
-from .model_config import ModelConfig
 
 _log = logging.getLogger(__name__)
 
 _NODE_VERSION = "22"
 _PI_PACKAGE = "@earendil-works/pi-coding-agent"
 _PI_VERSION_ENV = "PI_VERSION"
+_NPM_PREFIX = "/home/node/.npm-global"
 
 # DockerExecutor mounts the workdir at this path; install_skills relies on it.
 _CONTAINER_WORKDIR = "/workspace"
+# Env var Pi reads to relocate its agent config dir (models.json, skills, …).
+# Set by the ConfigScope that materialises models.json for custom providers.
+_PI_AGENT_DIR_ENV = "PI_CODING_AGENT_DIR"
+_PI_DEFAULT_AGENT_DIR = "/home/node/.pi/agent"
 # Where Pi auto-discovers user-level skills inside the container — see
 # https://pi.dev/docs/latest/skills (directories containing SKILL.md are
-# scanned recursively).
-_PI_NATIVE_SKILLS_DIR = "/home/node/.pi/agent/skills"
+# scanned recursively). Shell-expanded at container start: when a ConfigScope
+# relocated the agent dir, skills must follow it or Pi will never see them.
+_PI_NATIVE_SKILLS_DIR = (
+    f'"${{{_PI_AGENT_DIR_ENV}:-{_PI_DEFAULT_AGENT_DIR}}}"/skills'
+)
+
+
+def _resolve_version() -> str:
+    return resolve_cli_version("pi --version", _PI_PACKAGE, _PI_VERSION_ENV)
+
+
+def _dockerfile(version: str) -> str:
+    return (
+        f"FROM node:{_NODE_VERSION}\n"
+        f"ENV NPM_CONFIG_PREFIX={_NPM_PREFIX}\n"
+        f"RUN npm install -g {_PI_PACKAGE}@{version} --quiet 2>/dev/null\n"
+    )
+
+
+def _pi_docker_profile() -> DockerProfile:
+    """Static Docker knowledge for Pi, resolved lazily (see ClaudeCode)."""
+    version = _resolve_version()
+    return DockerProfile(
+        image=f"tea-pi:{version}",
+        dockerfile=_dockerfile(version),
+        user="node",
+        env_overrides={
+            "HOME": "/home/node",
+            "NPM_CONFIG_PREFIX": _NPM_PREFIX,
+            # Skip pi's startup network operations (update/registry checks) —
+            # they add latency and flakiness; model calls are unaffected.
+            "PI_OFFLINE": "1",
+        },
+    )
+
+
+@dataclass
+class PiConfig:
+    """Pi-specific model configuration.
+
+    model:       "provider/model-id" string (e.g. "anthropic/claude-sonnet-4-6")
+    api_key_env: name of the host env var to forward into the container
+    base_url:    OpenAI-compatible endpoint — only needed for non-native
+                 providers (Ollama, vLLM, LM Studio). Native cloud providers
+                 (Anthropic, OpenAI, Gemini, …) are known to Pi already.
+    """
+
+    model: str
+    api_key_env: str | None = None
+    base_url: str | None = None
 
 
 class Pi(Agent):
     DEFAULT_SKILL_SOURCES = (".pi/skills", ".agents/skills")
 
-    def __init__(self, model_config: ModelConfig) -> None:
+    def __init__(self, model_config: PiConfig) -> None:
         self._model_config = model_config
 
-    def build_spec(self, prompt: str, timeout: int) -> DockerSpec:
-        npm_prefix = "/home/node/.npm-global"
-        env: dict[str, str] = {
-            "HOME": "/home/node",
-            "NPM_CONFIG_PREFIX": npm_prefix,
-            # Skip pi's startup network operations (update/registry checks) —
-            # they add latency and flakiness; model calls are unaffected.
-            "PI_OFFLINE": "1",
-        }
+    def build_spec(self, prompt: str, timeout: int) -> ExecutionSpec:
+        env: dict[str, str] = {}
         api_key: str | None = None
         if self._model_config.api_key_env:
             if key := os.environ.get(self._model_config.api_key_env):
                 env[self._model_config.api_key_env] = key
                 api_key = key
 
-        extra_hosts: dict[str, str] = {}
-        setup_command: str | None = None
-
+        requirements = ExecutionRequirements()
         if self._model_config.base_url:
-            # Write a Pi models.json so Pi knows how to reach the custom provider.
-            # The model string must be "provider/model-id"; we derive the provider
-            # name from the part before the first slash (e.g. "ollama").
+            # Declare a models.json so Pi knows how to reach the custom
+            # provider; the executor materialises it into a fresh config dir
+            # and points PI_CODING_AGENT_DIR at it. The model string must be
+            # "provider/model-id"; the provider name is the part before the
+            # first slash (e.g. "ollama").
             models_json = _build_models_json(
                 self._model_config.model,
                 self._model_config.base_url,
                 api_key,
             )
-            escaped = models_json.replace("'", "'\\''")
-            setup_command = (
-                f"mkdir -p /home/node/.pi/agent"
-                f" && printf '%s' '{escaped}' > /home/node/.pi/agent/models.json"
+            requirements = ExecutionRequirements(
+                host_network_access=True,
+                config_scopes=[
+                    ConfigScope(
+                        env_var=_PI_AGENT_DIR_ENV,
+                        files={"models.json": models_json},
+                    )
+                ],
             )
-            extra_hosts["host.docker.internal"] = "host-gateway"
-
-        version = self.version()
-        image = f"tea-pi:{version}"
 
         env["PI_PROMPT"] = _sanitize_env_value(prompt)
 
-        return DockerSpec(
+        return ExecutionSpec(
             command=(
-                f"{npm_prefix}/bin/pi --mode json --no-extensions --print"
+                f"{_NPM_PREFIX}/bin/pi --mode json --no-extensions --print"
                 f" --model {shlex.quote(self._model_config.model)}"
                 ' "$PI_PROMPT"'
             ),
-            setup_command=setup_command,
-            dockerfile=self._dockerfile(version),
             env=env,
-            image=image,
-            user="node",
             timeout=timeout,
-            extra_hosts=extra_hosts,
+            requirements=requirements,
         )
 
     def install_skills(
         self,
-        spec: DockerSpec,
+        spec: ExecutionSpec,
         prompt: str,
         workdir: str,
         skills: list[str],
         source_for: dict[str, str],
-    ) -> tuple[DockerSpec, str]:
+    ) -> tuple[ExecutionSpec, str]:
         """Copy project skills into Pi's native discovery path.
 
         Pi auto-discovers skills from ``~/.pi/agent/skills/<name>/SKILL.md``
@@ -120,15 +166,8 @@ class Pi(Agent):
         )
         return replace(spec, setup_command=merged_setup), prompt
 
-    def _dockerfile(self, version: str) -> str:
-        return (
-            f"FROM node:{_NODE_VERSION}\n"
-            "ENV NPM_CONFIG_PREFIX=/home/node/.npm-global\n"
-            f"RUN npm install -g {_PI_PACKAGE}@{version} --quiet 2>/dev/null\n"
-        )
-
     def version(self) -> str:
-        return resolve_cli_version("pi --version", _PI_PACKAGE, _PI_VERSION_ENV)
+        return _resolve_version()
 
     def parse(self, raw: RawResult) -> AgentRun:
         run = _parse(raw.stdout)
@@ -151,7 +190,7 @@ class PiHarness:
     """Factory for Pi runs.
 
     Exposes only ``with_model()``: Pi has no default model and no OAuth/api-key
-    fallback path, so a ``ModelConfig`` must always be supplied externally.
+    fallback path, so a ``PiConfig`` must always be supplied externally.
     Because ``PiHarness`` does not inherit ``Harness``, ``Agents.Pi.prompt(...)``
     is a static type error — the only valid entry point is
     ``Agents.Pi.with_model(config).prompt(...)``.
@@ -162,10 +201,10 @@ class PiHarness:
             list(skills_sources) if skills_sources is not None else None
         )
 
-    def with_model(self, config: ModelConfig) -> Harness:
+    def with_model(self, config: PiConfig) -> Harness:
         return Harness(
             Pi(model_config=config),
-            DockerExecutor(),
+            DockerExecutor(_pi_docker_profile),
             skills_sources=self._skills_sources,
         )
 
@@ -265,10 +304,12 @@ def _skill_setup(skills: list[str], source_for: dict[str, str]) -> str:
     """Build the shell prelude that installs skills into Pi's native path.
 
     Copies each ``/workspace/<source_for[name]>/<name>/`` directory (mounted
-    workdir) into ``~/.pi/agent/skills/`` so Pi auto-discovers the skills at
-    startup. The whole directory is copied, not just ``SKILL.md``: Pi tells
-    the model to resolve relative paths in a skill against the skill
-    directory, so supporting files must travel with it.
+    workdir) into ``$PI_CODING_AGENT_DIR/skills/`` — falling back to
+    ``~/.pi/agent/skills/`` when no ConfigScope relocated the agent dir — so
+    Pi auto-discovers the skills at startup. The whole directory is copied,
+    not just ``SKILL.md``: Pi tells the model to resolve relative paths in a
+    skill against the skill directory, so supporting files must travel with
+    it.
     """
     cmds = [f"mkdir -p {_PI_NATIVE_SKILLS_DIR}"]
     for name in skills:

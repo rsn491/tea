@@ -4,7 +4,7 @@ import json
 import re
 
 from tea.agent.agent_run import StepType
-from tea.agent.claude_code import ClaudeCode
+from tea.agent.claude_code import ClaudeCode, _claude_docker_profile
 from tea.agent.harness import Harness
 from tea.executor.docker_executor import DockerExecutor
 
@@ -24,7 +24,7 @@ _DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 def _default_harness() -> Harness:
     return Harness(
         ClaudeCode(model=_DEFAULT_MODEL, max_turns=1),
-        DockerExecutor(),
+        DockerExecutor(_claude_docker_profile),
     )
 
 

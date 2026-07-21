@@ -5,29 +5,26 @@ import logging
 import os
 import shutil
 import tempfile
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from tea._context import _active_collector
 from tea.tui.metrics import print_metrics
 
 from .agent_run import AgentRun, FileChange, FileDiff
 
+if TYPE_CHECKING:
+    from tea.executor import Executor
+
+    from .agent import Agent
+
 _log = logging.getLogger(__name__)
 
 
 class _Runnable(Protocol):
+    _agent: Agent
+    _executor: Executor
     skills_sources: list[str] | None
     default_skill_sources: tuple[str, ...]
-
-    def _execute(
-        self,
-        text: str,
-        *,
-        timeout: int,
-        workdir: str | None,
-        skills: list[str],
-        source_for: dict[str, str],
-    ) -> AgentRun: ...
 
 
 class RunBuilder:
@@ -64,6 +61,9 @@ class RunBuilder:
         return self
 
     def run(self) -> AgentRun:
+        agent = self._runner._agent
+        executor = self._runner._executor
+
         tmp_dir: str | None = None
         if self._workdir:
             tmp_dir = tempfile.mkdtemp()
@@ -79,13 +79,13 @@ class RunBuilder:
         skills, source_for = _discover_skills(sources, effective_workdir)
         try:
             before = _snapshot(self._workdir)
-            result = self._runner._execute(
-                self._text,
-                timeout=self._timeout,
-                workdir=effective_workdir,
-                skills=skills,
-                source_for=source_for,
-            )
+            spec = agent.build_spec(self._text, self._timeout)
+            if skills and effective_workdir:
+                spec, _ = agent.install_skills(
+                    spec, self._text, effective_workdir, skills, source_for
+                )
+            raw = executor.run(spec, effective_workdir)
+            result = agent.parse(raw)
             after = _snapshot(effective_workdir)
             result._files_changed_fn = lambda: _diff_snapshots(before, after)
         finally:
