@@ -6,11 +6,6 @@ import sys
 _TTY = sys.stdout.isatty() and os.environ.get("NO_COLOR") is None
 _NO_SPINNER = os.environ.get("NO_SPINNER") is not None
 
-# Not every terminal renders 24-bit color; Apple Terminal.app, for one, mangles
-# `38;2;…` rather than approximating it. Emit truecolor only when COLORTERM
-# advertises it, and fall back to the nearest 256-color index otherwise.
-_TRUECOLOR = os.environ.get("COLORTERM", "").lower() in ("truecolor", "24bit")
-
 
 def _c(code: str, text: str) -> str:
     """Wrap text in an ANSI escape sequence; passthrough if not a TTY."""
@@ -18,9 +13,11 @@ def _c(code: str, text: str) -> str:
 
 
 def _rgb(r: int, g: int, b: int) -> str:
-    """ANSI foreground color code — 24-bit when supported, else 256-color."""
-    if _TRUECOLOR:
-        return f"38;2;{r};{g};{b}"
+    """256-color ANSI foreground code nearest to the given RGB triple.
+
+    We target 256-color rather than 24-bit truecolor for portability — not
+    every terminal renders `38;2;…` correctly (Apple Terminal.app mangles it).
+    """
     return f"38;5;{_nearest_256(r, g, b)}"
 
 

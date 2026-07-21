@@ -82,16 +82,10 @@ def test_set_mode_default_is_dark_theme():
     assert active_mod.active_theme() is DefaultTheme
 
 
-# ── _rgb / 256-color fallback ───────────────────────────────────────────────────
+# ── _rgb / 256-color mapping ────────────────────────────────────────────────────
 
 
-def test_rgb_emits_truecolor_when_supported(monkeypatch):
-    monkeypatch.setattr("tea.tui.utils._TRUECOLOR", True)
-    assert _rgb(74, 168, 120) == "38;2;74;168;120"
-
-
-def test_rgb_falls_back_to_256_without_truecolor(monkeypatch):
-    monkeypatch.setattr("tea.tui.utils._TRUECOLOR", False)
+def test_rgb_emits_256_color_code():
     assert _rgb(74, 168, 120) == f"38;5;{_nearest_256(74, 168, 120)}"
 
 
