@@ -30,10 +30,12 @@ class Baseline:
 
     @classmethod
     def from_dict(cls, data: dict) -> Baseline:
+        version = data.get("schema_version", SCHEMA_VERSION)
+        if version != SCHEMA_VERSION:
+            raise ValueError(f"unsupported baseline schema_version {version}")
         tests = {
             name: TestSummary.from_dict(s) for name, s in data.get("tests", {}).items()
         }
-        version = data.get("schema_version", SCHEMA_VERSION)
         return cls(tests=tests, schema_version=version)
 
     def write(self, path: Path) -> None:

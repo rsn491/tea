@@ -10,6 +10,7 @@ import pytest
 
 from tea._context import _active_checks, _active_collector
 from tea.agent.agent_run import AgentRun
+from tea.baseline import Baseline, TestSummary
 from tea.runner import (
     TestCase,
     TestRunner,
@@ -18,6 +19,7 @@ from tea.runner import (
     discover_test_files,
     iterations,
     load_module,
+    run,
 )
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -403,6 +405,32 @@ def test_run_all_sequential_returns_false_and_keeps_running_after_failure():
     assert calls == [1]
 
 
+def test_run_all_keys_summaries_by_file_qualified_id():
+    def _make():
+        def test_same():
+            pass
+
+        return test_same
+
+    cases = [
+        TestCase(Path("suite_a/test_x.py"), _make()),
+        TestCase(Path("suite_b/test_x.py"), _make()),
+    ]
+    runner = TestRunner(workers=1)
+    patches = _patch_tui()
+    for p in patches:
+        p.start()
+    try:
+        runner.run_all(cases)
+    finally:
+        for p in patches:
+            p.stop()
+    assert set(runner.summaries) == {
+        "suite_a/test_x.py::test_same",
+        "suite_b/test_x.py::test_same",
+    }
+
+
 def test_run_all_sequential_respects_tea_max_failures():
     i = -1
 
@@ -524,6 +552,62 @@ def test_run_all_parallel_returns_false_when_a_worker_crashes():
     finally:
         for p in patches:
             p.stop()
+
+
+# ── run() — summary export / baseline comparison ──────────────────────────────
+
+
+def _passing_test_file(tmp_path) -> Path:
+    f = tmp_path / "test_mod.py"
+    f.write_text("def test_ok(): pass\n")
+    return f
+
+
+def test_run_missing_baseline_is_warn_only(tmp_path, capsys):
+    f = _passing_test_file(tmp_path)
+    patches = _patch_tui()
+    for p in patches:
+        p.start()
+    try:
+        ok = run(str(f), baseline=str(tmp_path / "nope.json"))
+    finally:
+        for p in patches:
+            p.stop()
+    assert ok is True  # a passing run is not turned red by an unreadable baseline
+    assert "cannot read baseline" in capsys.readouterr().out
+
+
+def test_run_does_not_compare_against_the_export_it_just_wrote(tmp_path):
+    f = _passing_test_file(tmp_path)
+    path = tmp_path / "baseline.json"  # same path for export + baseline, missing
+    view = MagicMock()
+    patches = [*_patch_tui(), patch("tea.runner.BaselineComparisonView", view)]
+    for p in patches:
+        p.start()
+    try:
+        ok = run(str(f), summary_export=str(path), baseline=str(path))
+    finally:
+        for p in patches:
+            p.stop()
+    assert ok is True
+    assert path.exists()  # export was written
+    view.assert_not_called()  # baseline did not exist pre-run, so no self-compare
+
+
+def test_run_compares_against_preexisting_baseline(tmp_path):
+    f = _passing_test_file(tmp_path)
+    path = tmp_path / "baseline.json"
+    Baseline({"old": TestSummary(success_rate=1.0)}).write(path)
+    view = MagicMock()
+    patches = [*_patch_tui(), patch("tea.runner.BaselineComparisonView", view)]
+    for p in patches:
+        p.start()
+    try:
+        run(str(f), baseline=str(path))
+    finally:
+        for p in patches:
+            p.stop()
+    view.assert_called_once()
 
 
 # ── load_module (existing error-path tests kept here for completeness) ─────────

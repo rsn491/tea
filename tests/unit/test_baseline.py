@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from tea.agent.agent_run import AgentRun, Step, StepType
 from tea.baseline import SCHEMA_VERSION, Baseline, Metric, TestSummary
 from tea.runner import _CollectResult
@@ -115,3 +117,24 @@ def test_compare_skips_tests_absent_from_current():
 
 def test_compare_skips_metric_when_baseline_value_is_zero():
     assert _baseline(100).compare(_baseline(0)) == []
+
+
+# ── robustness against malformed / unsupported baselines ──────────────────────
+
+
+def test_from_dict_rejects_unsupported_schema_version():
+    data = {"schema_version": SCHEMA_VERSION + 1, "tests": {}}
+    with pytest.raises(ValueError, match="schema_version"):
+        Baseline.from_dict(data)
+
+
+def test_value_returns_none_when_avg_missing_from_entry():
+    summary = TestSummary(
+        success_rate=1.0, metrics={Metric.TOKEN_COUNT.key: {"min": 1}}
+    )
+    assert summary.value(Metric.TOKEN_COUNT) is None
+
+
+def test_compare_skips_metric_with_malformed_entry():
+    current = Baseline({"t": TestSummary(1.0, {Metric.TOKEN_COUNT.key: {}})})
+    assert current.compare(_baseline(3421)) == []

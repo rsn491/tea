@@ -44,7 +44,7 @@ class TestSummary:
         if metric is Metric.SUCCESS_RATE:
             return self.success_rate
         entry = self.metrics.get(metric.key)
-        return entry["avg"] if entry else None
+        return entry.get("avg") if entry else None
 
     def to_dict(self) -> dict:
         return {"success_rate": self.success_rate, "metrics": self.metrics}
