@@ -20,9 +20,7 @@ from tea.executor.docker_executor import DockerExecutor
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 
-_PI_TEST_CFG = PiConfig(
-    "anthropic/claude-sonnet-4-6", api_key_env="ANTHROPIC_API_KEY"
-)
+_PI_TEST_CFG = PiConfig("anthropic/claude-sonnet-4-6", api_key_env="ANTHROPIC_API_KEY")
 
 # Pi's skill-copy destination (follows a ConfigScope-relocated agent dir).
 _PI_SKILLS_DST = '"${PI_CODING_AGENT_DIR:-/home/node/.pi/agent}"/skills'
@@ -603,9 +601,7 @@ def test_run_builder_explicit_sources_replaces_defaults(tmp_path):
 def test_run_builder_skills_from_empty_list_disables_loading(tmp_path):
     _make_skill(str(tmp_path), "hello", "x", skills_dir=".claude/skills")
     harness, agent, _ = _recording_harness(defaults=(".claude/skills",))
-    RunBuilder.prompt(harness, "do thing").workdir(str(tmp_path)).skills_from(
-        []
-    ).run()
+    RunBuilder.prompt(harness, "do thing").workdir(str(tmp_path)).skills_from([]).run()
 
     assert agent.install_calls == []
 

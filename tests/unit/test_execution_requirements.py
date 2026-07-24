@@ -7,8 +7,9 @@ import os
 import pytest
 
 from tea.agent import Agents
+from tea.agent._version import resolve_cli_version
 from tea.agent.claude_code import ClaudeCode, ClaudeCodeHarness, _claude_docker_profile
-from tea.agent.codex import Codex
+from tea.agent.codex import Codex, _codex_docker_profile
 from tea.agent.harness import Harness
 from tea.agent.pi import Pi, PiConfig, PiHarness
 from tea.executor import ConfigScope, ExecutionRequirements, ExecutionSpec
@@ -110,6 +111,56 @@ def test_docker_executor_accepts_profile_factory():
     assert calls == [1]
     assert fake.configs[0].image == "node:22"
     assert fake.configs[0].user == "node"
+
+
+# ── Agent DockerProfile factories ────────────────────────────────────────────
+#
+# Each agent ships a zero-arg factory holding its static Docker knowledge. The
+# CLI version is resolved at call time and pins both the image tag and the
+# Dockerfile's npm install, so a version bump forces a fresh build instead of
+# silently reusing a stale image.
+
+
+def test_claude_docker_profile_pins_versioned_image(monkeypatch):
+    monkeypatch.setenv("CLAUDE_CODE_VERSION", "1.2.3")
+    resolve_cli_version.cache_clear()
+    profile = _claude_docker_profile()
+
+    assert profile.image == "tea-claude-code:1.2.3"
+    assert profile.user == "node"
+    assert "FROM node:22" in profile.dockerfile
+    assert "@anthropic-ai/claude-code@1.2.3" in profile.dockerfile
+    assert profile.env_overrides["HOME"] == "/home/node"
+    resolve_cli_version.cache_clear()
+
+
+def test_claude_code_agent_version_uses_env_var(monkeypatch):
+    """ClaudeCode.version() delegates to resolve_cli_version."""
+    monkeypatch.setenv("CLAUDE_CODE_VERSION", "9.8.7")
+    resolve_cli_version.cache_clear()
+    assert ClaudeCode().version() == "9.8.7"
+    resolve_cli_version.cache_clear()
+
+
+def test_codex_docker_profile_pins_versioned_image(monkeypatch):
+    monkeypatch.setenv("CODEX_VERSION", "4.5.6")
+    resolve_cli_version.cache_clear()
+    profile = _codex_docker_profile()
+
+    assert profile.image == "tea-codex:4.5.6"
+    assert profile.user == "node"
+    assert "FROM node:22" in profile.dockerfile
+    assert "@openai/codex@4.5.6" in profile.dockerfile
+    assert profile.env_overrides["HOME"] == "/home/node"
+    resolve_cli_version.cache_clear()
+
+
+def test_codex_agent_version_uses_env_var(monkeypatch):
+    """Codex.version() delegates to resolve_cli_version."""
+    monkeypatch.setenv("CODEX_VERSION", "9.8.7")
+    resolve_cli_version.cache_clear()
+    assert Codex().version() == "9.8.7"
+    resolve_cli_version.cache_clear()
 
 
 # ── host_network_access ───────────────────────────────────────────────────────

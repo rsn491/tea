@@ -101,9 +101,7 @@ class ClaudeCode(Agent):
             ),
             env=env,
             timeout=timeout,
-            requirements=ExecutionRequirements(
-                extra_mounts=dict(self._extra_volumes)
-            ),
+            requirements=ExecutionRequirements(extra_mounts=dict(self._extra_volumes)),
         )
 
     def install_skills(

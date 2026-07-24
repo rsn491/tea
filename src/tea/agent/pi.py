@@ -39,9 +39,7 @@ _PI_DEFAULT_AGENT_DIR = "/home/node/.pi/agent"
 # https://pi.dev/docs/latest/skills (directories containing SKILL.md are
 # scanned recursively). Shell-expanded at container start: when a ConfigScope
 # relocated the agent dir, skills must follow it or Pi will never see them.
-_PI_NATIVE_SKILLS_DIR = (
-    f'"${{{_PI_AGENT_DIR_ENV}:-{_PI_DEFAULT_AGENT_DIR}}}"/skills'
-)
+_PI_NATIVE_SKILLS_DIR = f'"${{{_PI_AGENT_DIR_ENV}:-{_PI_DEFAULT_AGENT_DIR}}}"/skills'
 
 
 def _resolve_version() -> str:
