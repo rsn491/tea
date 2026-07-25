@@ -4,7 +4,7 @@ import pytest
 
 from tea.tui.theme import DefaultTheme, LightTheme, resolve_mode, set_mode
 from tea.tui.theme import active as active_mod
-from tea.tui.utils import _nearest_256, _rgb
+from tea.tui.utils import _rgb
 
 
 @pytest.fixture(autouse=True)
@@ -82,23 +82,8 @@ def test_set_mode_default_is_dark_theme():
     assert active_mod.active_theme() is DefaultTheme
 
 
-# ── _rgb / 256-color mapping ────────────────────────────────────────────────────
+# ── _rgb / truecolor ────────────────────────────────────────────────────────────
 
 
-def test_rgb_emits_256_color_code():
-    assert _rgb(74, 168, 120) == f"38;5;{_nearest_256(74, 168, 120)}"
-
-
-@pytest.mark.parametrize(
-    "rgb,index",
-    [
-        ((0, 0, 0), 16),  # black → cube origin
-        ((255, 255, 255), 231),  # white → cube corner
-        ((4, 4, 4), 16),  # near-black gray → cube origin
-        ((250, 250, 250), 231),  # near-white gray → cube corner
-        ((128, 128, 128), 244),  # mid gray → grayscale ramp
-        ((74, 168, 120), 72),  # SENCHA → 16 + 36*1 + 6*3 + 2
-    ],
-)
-def test_nearest_256_maps_known_colors(rgb, index):
-    assert _nearest_256(*rgb) == index
+def test_rgb_emits_truecolor_code():
+    assert _rgb(74, 168, 120) == "38;2;74;168;120"
