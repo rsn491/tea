@@ -2,12 +2,9 @@ from __future__ import annotations
 
 import statistics
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
 
 from tea.baseline.metric import Metric
-
-if TYPE_CHECKING:
-    from tea.runner import _CollectResult
+from tea.collect_result import _CollectResult
 
 
 @dataclass

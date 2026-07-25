@@ -3,9 +3,8 @@ from __future__ import annotations
 import importlib.util
 import sys
 import threading
-from collections import defaultdict
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
 from typing import Callable
@@ -13,6 +12,7 @@ from typing import Callable
 from tea._context import _active_checks, _active_collector
 from tea.agent.agent_run import AgentRun
 from tea.baseline import Baseline, TestSummary
+from tea.collect_result import _CollectResult
 from tea.infra.docker import Docker
 from tea.tui import _bold_cyan, _cyan, _dim, _Spinner
 from tea.tui.baseline_view import BaselineComparisonView
@@ -29,24 +29,6 @@ class TestCase:
         """File-qualified identity, unique even when names repeat across files."""
         name = getattr(self.fn, "__name__", repr(self.fn))
         return f"{self.path}::{name}"
-
-
-def _empty_check_results() -> dict[str, list[bool]]:
-    return defaultdict(list)
-
-
-@dataclass
-class _CollectResult:
-    check_results: dict[str, list[bool]] = field(default_factory=_empty_check_results)
-    all_runs: list[AgentRun] = field(default_factory=list)
-    run_errors: list[Exception] = field(default_factory=list)
-    iterations: int = 0
-    failed_iterations: int = 0
-    max_failures: int = 0
-
-    @property
-    def passed(self) -> bool:
-        return self.failed_iterations <= self.max_failures
 
 
 def discover_test_files(path: Path) -> list[Path]:

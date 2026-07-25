@@ -4,7 +4,7 @@ import pytest
 
 from tea.agent.agent_run import AgentRun, Step, StepType
 from tea.baseline import SCHEMA_VERSION, Baseline, Metric, TestSummary
-from tea.runner import _CollectResult
+from tea.collect_result import _CollectResult
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 

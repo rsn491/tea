@@ -2,10 +2,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from enum import Enum
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from tea.agent.agent_run import AgentRun
+from tea.agent.agent_run import AgentRun
 
 
 def _as_int(value: float) -> str:
