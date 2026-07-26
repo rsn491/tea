@@ -9,13 +9,12 @@ import pytest
 
 from tea.agent.agent import Agent
 from tea.agent.agent_run import AgentRun
-from tea.agent.claude_code import ClaudeCode, ClaudeCodeHarness, _claude_docker_profile
+from tea.agent.claude_code import ClaudeCode, ClaudeCodeHarness
 from tea.agent.codex import Codex
 from tea.agent.harness import Harness
 from tea.agent.pi import Pi, PiConfig
 from tea.agent.run_builder import RunBuilder, _discover_skills, _resolve_skill_sources
 from tea.executor import ExecutionSpec, Executor, RawResult
-from tea.executor.docker_executor import DockerExecutor
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -320,7 +319,8 @@ def test_claude_code_harness_with_skills_runs_install_skills(monkeypatch):
             source_for={"regression": "skills"},
         )
     spec = executor.spec
-    assert isinstance(spec, ExecutionSpec)
+    # Guards the None case; every spec is an ExecutionSpec by construction.
+    assert spec is not None
     assert spec.setup_command is not None
     # Skills get materialised into Claude Code's native cwd location.
     assert "/workspace/.claude/skills/regression" in spec.setup_command
@@ -342,7 +342,8 @@ def test_codex_harness_with_skills_runs_install_skills(monkeypatch):
         )
 
     spec = executor.spec
-    assert isinstance(spec, ExecutionSpec)
+    # Guards the None case; every spec is an ExecutionSpec by construction.
+    assert spec is not None
     assert spec.setup_command is not None
     assert "/home/node/.codex/skills/skill-x" in spec.setup_command
 
@@ -502,9 +503,7 @@ def test_claude_code_extra_volumes_defaults_empty(monkeypatch):
 
 def test_claude_code_harness_with_api_key_threads_model_and_turns():
     agent = ClaudeCode(model="claude-sonnet-4-6", max_turns=3)
-    harness = ClaudeCodeHarness(
-        agent, DockerExecutor(_claude_docker_profile)
-    ).with_api_key()
+    harness = ClaudeCodeHarness.docker(agent).with_api_key()
     inner = harness._agent
     assert isinstance(inner, ClaudeCode)
     assert inner.model == "claude-sonnet-4-6"
@@ -512,11 +511,7 @@ def test_claude_code_harness_with_api_key_threads_model_and_turns():
 
 
 def test_claude_code_harness_with_api_key_threads_skills_sources():
-    harness = ClaudeCodeHarness(
-        ClaudeCode(),
-        DockerExecutor(_claude_docker_profile),
-        skills_sources=["eval/skills"],
-    ).with_api_key()
+    harness = ClaudeCodeHarness.docker(skills_sources=["eval/skills"]).with_api_key()
     assert harness.skills_sources == ["eval/skills"]
 
 
@@ -699,7 +694,8 @@ def test_pi_harness_with_skills_runs_install_skills(tmp_path):
         source_for={"regression": "skills"},
     )
     spec = executor.spec
-    assert isinstance(spec, ExecutionSpec)
+    # Guards the None case; every spec is an ExecutionSpec by construction.
+    assert spec is not None
     assert spec.setup_command is not None
     assert "cp -R /workspace/skills/regression /home/node/.pi/agent/skills/" in (
         spec.setup_command

@@ -4,6 +4,7 @@ import json
 import os
 import shlex
 from dataclasses import replace
+from typing import Self
 
 from tea.executor import (
     ExecutionRequirements,
@@ -16,7 +17,7 @@ from ._utils import _sanitize_env_value
 from ._version import resolve_cli_version
 from .agent import Agent
 from .agent_run import AgentRun, Step, StepType, ToolCall
-from .harness import ApiKeyHarness, Harness
+from .harness import ApiKeyHarness
 
 _NODE_VERSION = "22"
 _CLAUDE_CODE_PACKAGE = "@anthropic-ai/claude-code"
@@ -45,11 +46,13 @@ def _dockerfile(version: str) -> str:
     )
 
 
-def _claude_docker_profile() -> DockerProfile:
+def claude_docker_profile() -> DockerProfile:
     """Static Docker knowledge for Claude Code, resolved lazily.
 
     A callable (not a constant) so the version probe — a subprocess — runs at
-    execution time, never at import time.
+    execution time, never at import time. Prefer ``ClaudeCodeHarness.docker()``
+    over wiring this into a ``DockerExecutor`` by hand: the agent and its image
+    must match, and that pairing lives in exactly one place.
     """
     version = _resolve_version()
     return DockerProfile(
@@ -82,6 +85,18 @@ class ClaudeCode(Agent):
     @property
     def max_turns(self) -> int:
         return self._max_turns
+
+    def copy(self, *, model: str | None = None, max_turns: int | None = None) -> Self:
+        """Return a copy with the given fields overridden, keeping the rest.
+
+        Every field must be carried over here — a factory that rebuilds
+        ``ClaudeCode(...)`` from a subset of them silently drops the others.
+        """
+        return type(self)(
+            model=self._model if model is None else model,
+            max_turns=self._max_turns if max_turns is None else max_turns,
+            extra_volumes=self._extra_volumes,
+        )
 
     def build_spec(self, prompt: str, timeout: int) -> ExecutionSpec:
         env: dict[str, str] = {}
@@ -214,25 +229,37 @@ class ClaudeCode(Agent):
 
 
 class ClaudeCodeHarness(ApiKeyHarness):
-    def with_model(self, model: str) -> Harness:
-        agent = self._agent
-        max_turns = (
-            agent.max_turns if isinstance(agent, ClaudeCode) else _DEFAULT_MAX_TURNS
+    @classmethod
+    def docker(
+        cls,
+        agent: ClaudeCode | None = None,
+        *,
+        skills_sources: list[str] | None = None,
+    ) -> Self:
+        """Pair a ``ClaudeCode`` agent with the Docker image built for it.
+
+        The single place agent and image are wired together. Constructing
+        ``ClaudeCodeHarness(ClaudeCode(), DockerExecutor(some_other_profile))``
+        by hand type-checks but runs the Claude CLI inside a foreign image.
+        """
+        return cls(
+            agent if agent is not None else ClaudeCode(),
+            DockerExecutor(claude_docker_profile),
+            skills_sources=skills_sources,
         )
-        return Harness(
-            ClaudeCode(model=model, max_turns=max_turns),
-            DockerExecutor(_claude_docker_profile),
+
+    def with_model(self, model: str) -> Self:
+        return type(self).docker(
+            self._claude_agent().copy(model=model),
             skills_sources=self.skills_sources,
         )
 
-    def with_api_key(self) -> Harness:
-        agent = self._agent
-        model = agent.model if isinstance(agent, ClaudeCode) else _DEFAULT_MODEL
-        max_turns = (
-            agent.max_turns if isinstance(agent, ClaudeCode) else _DEFAULT_MAX_TURNS
-        )
-        return Harness(
-            ClaudeCode(model=model, max_turns=max_turns),
-            DockerExecutor(_claude_docker_profile),
+    def with_api_key(self) -> Self:
+        return type(self).docker(
+            self._claude_agent().copy(),
             skills_sources=self.skills_sources,
         )
+
+    def _claude_agent(self) -> ClaudeCode:
+        agent = self._agent
+        return agent if isinstance(agent, ClaudeCode) else ClaudeCode()

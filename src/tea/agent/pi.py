@@ -49,8 +49,12 @@ def _dockerfile(version: str) -> str:
     )
 
 
-def _pi_docker_profile() -> DockerProfile:
-    """Static Docker knowledge for Pi, resolved lazily (see ClaudeCode)."""
+def pi_docker_profile() -> DockerProfile:
+    """Static Docker knowledge for Pi, resolved lazily (see ClaudeCode).
+
+    ``PiHarness.with_model`` is the only place this is paired with a ``Pi``
+    agent; keep it that way so the agent and its image cannot diverge.
+    """
     version = _resolve_version()
     return DockerProfile(
         image=f"tea-pi:{version}",
@@ -75,6 +79,15 @@ class PiConfig:
     base_url:    OpenAI-compatible endpoint — only needed for non-native
                  providers (Ollama, vLLM, LM Studio). Native cloud providers
                  (Anthropic, OpenAI, Gemini, …) are known to Pi already.
+
+                 The URL is used verbatim inside the container, so a provider
+                 listening on the host must be named the way the container
+                 sees it: under ``DockerExecutor`` that is
+                 ``http://host.docker.internal:11434/v1``, not ``localhost``
+                 (which resolves to the container itself). Setting ``base_url``
+                 declares ``host_network_access``, which is what makes that
+                 name resolve — but the rewrite itself is still the caller's
+                 job. See https://github.com/rsn491/tea/issues/52.
     """
 
     model: str
@@ -198,7 +211,7 @@ class PiHarness:
     def with_model(self, config: PiConfig) -> Harness:
         return Harness(
             Pi(model_config=config),
-            DockerExecutor(_pi_docker_profile),
+            DockerExecutor(pi_docker_profile),
             skills_sources=self._skills_sources,
         )
 

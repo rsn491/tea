@@ -139,7 +139,7 @@ from tea.agent import PiConfig
 Agents.Pi.with_model(PiConfig(
     model="ollama/qwen2.5-coder:1.5b",  # required
     api_key_env="MY_API_KEY",           # host env var forwarded into container
-    base_url="http://localhost:11434",  # OpenAI-compatible endpoint
+    base_url="http://host.docker.internal:11434/v1",  # OpenAI-compatible endpoint
 ))
 ```
 
@@ -148,6 +148,13 @@ Agents.Pi.with_model(PiConfig(
 | `model` | Yes | Model identifier |
 | `api_key_env` | No | Name of a host env var to forward into the container as the API key |
 | `base_url` | No | OpenAI-compatible endpoint for custom or local providers |
+
+`base_url` is used verbatim inside the container, so a provider running on
+your machine must be addressed as `http://host.docker.internal:<port>` — not
+`localhost`, which resolves to the container itself. Setting `base_url` makes
+tea declare `host_network_access`, which is what makes that name resolve; the
+address is still yours to write ([#52](https://github.com/rsn491/tea/issues/52)
+tracks moving the rewrite into the executor).
 
 ---
 

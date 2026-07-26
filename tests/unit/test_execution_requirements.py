@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import pytest
+
+import tea.executor
 from tea.agent import Agents
-from tea.agent._version import resolve_cli_version
-from tea.agent.claude_code import ClaudeCode, ClaudeCodeHarness, _claude_docker_profile
-from tea.agent.codex import Codex, _codex_docker_profile
+from tea.agent.claude_code import ClaudeCode, ClaudeCodeHarness, claude_docker_profile
+from tea.agent.codex import Codex, CodexHarness, codex_docker_profile
 from tea.agent.harness import Harness
 from tea.agent.pi import Pi, PiConfig, PiHarness
 from tea.executor import ExecutionRequirements, ExecutionSpec
@@ -51,6 +53,12 @@ def test_docker_profile_defaults():
     assert p.dockerfile is None
     assert p.user is None
     assert p.env_overrides == {}
+
+
+def test_docker_profile_rejects_empty_image():
+    """An empty tag must fail here, not reach ``docker run``."""
+    with pytest.raises(ValueError, match="non-empty image tag"):
+        DockerProfile(image="")
 
 
 def test_docker_profile_env_overrides_applied():
@@ -106,44 +114,36 @@ def test_docker_executor_accepts_profile_factory():
 
 def test_claude_docker_profile_pins_versioned_image(monkeypatch):
     monkeypatch.setenv("CLAUDE_CODE_VERSION", "1.2.3")
-    resolve_cli_version.cache_clear()
-    profile = _claude_docker_profile()
+    profile = claude_docker_profile()
 
     assert profile.image == "tea-claude-code:1.2.3"
     assert profile.user == "node"
     assert "FROM node:22" in profile.dockerfile
     assert "@anthropic-ai/claude-code@1.2.3" in profile.dockerfile
     assert profile.env_overrides["HOME"] == "/home/node"
-    resolve_cli_version.cache_clear()
 
 
 def test_claude_code_agent_version_uses_env_var(monkeypatch):
     """ClaudeCode.version() delegates to resolve_cli_version."""
     monkeypatch.setenv("CLAUDE_CODE_VERSION", "9.8.7")
-    resolve_cli_version.cache_clear()
     assert ClaudeCode().version() == "9.8.7"
-    resolve_cli_version.cache_clear()
 
 
 def test_codex_docker_profile_pins_versioned_image(monkeypatch):
     monkeypatch.setenv("CODEX_VERSION", "4.5.6")
-    resolve_cli_version.cache_clear()
-    profile = _codex_docker_profile()
+    profile = codex_docker_profile()
 
     assert profile.image == "tea-codex:4.5.6"
     assert profile.user == "node"
     assert "FROM node:22" in profile.dockerfile
     assert "@openai/codex@4.5.6" in profile.dockerfile
     assert profile.env_overrides["HOME"] == "/home/node"
-    resolve_cli_version.cache_clear()
 
 
 def test_codex_agent_version_uses_env_var(monkeypatch):
     """Codex.version() delegates to resolve_cli_version."""
     monkeypatch.setenv("CODEX_VERSION", "9.8.7")
-    resolve_cli_version.cache_clear()
     assert Codex().version() == "9.8.7"
-    resolve_cli_version.cache_clear()
 
 
 # ── host_network_access ───────────────────────────────────────────────────────
@@ -260,22 +260,35 @@ def test_claude_code_harness_with_model_sets_model():
 
 
 def test_claude_code_harness_with_model_preserves_max_turns():
-    base = ClaudeCodeHarness(
-        ClaudeCode(max_turns=5), DockerExecutor(_claude_docker_profile)
-    )
+    base = ClaudeCodeHarness.docker(ClaudeCode(max_turns=5))
     harness = base.with_model("claude-opus-4-7")
     assert isinstance(harness._agent, ClaudeCode)
     assert harness._agent.max_turns == 5
 
 
 def test_claude_code_harness_with_model_preserves_skills_sources():
-    base = ClaudeCodeHarness(
-        ClaudeCode(),
-        DockerExecutor(_claude_docker_profile),
-        skills_sources=["eval/skills"],
-    )
+    base = ClaudeCodeHarness.docker(skills_sources=["eval/skills"])
     harness = base.with_model("claude-opus-4-7")
     assert harness.skills_sources == ["eval/skills"]
+
+
+def test_claude_code_harness_with_model_preserves_extra_volumes():
+    """Every agent field survives the rebuild, not just the ones named."""
+    base = ClaudeCodeHarness.docker(ClaudeCode(extra_volumes={"/host": "/container"}))
+    harness = base.with_model("claude-opus-4-7")
+    spec = harness._agent.build_spec("hi", timeout=30)
+    assert spec.requirements.extra_mounts == {"/host": "/container"}
+
+
+def test_claude_code_factories_compose():
+    """Both factories return the concrete harness, so they chain either way."""
+    harness = (
+        ClaudeCodeHarness.docker(ClaudeCode(max_turns=7)).with_model("m").with_api_key()
+    )
+    assert isinstance(harness, ClaudeCodeHarness)
+    assert isinstance(harness._agent, ClaudeCode)
+    assert harness._agent.model == "m"
+    assert harness._agent.max_turns == 7
 
 
 # ── Codex with_model ──────────────────────────────────────────────────────────
@@ -286,6 +299,55 @@ def test_codex_harness_with_model_sets_model():
     assert isinstance(harness, Harness)
     assert isinstance(harness._agent, Codex)
     assert harness._agent.model == "gpt-5.3-codex"
+
+
+def test_codex_harness_with_model_preserves_skills_sources():
+    base = CodexHarness.docker(skills_sources=["eval/skills"])
+    harness = base.with_model("gpt-5.3-codex")
+    assert harness.skills_sources == ["eval/skills"]
+
+
+def test_codex_factories_compose():
+    harness = CodexHarness.docker().with_model("gpt-5.3-codex").with_api_key()
+    assert isinstance(harness, CodexHarness)
+    assert isinstance(harness._agent, Codex)
+    assert harness._agent.model == "gpt-5.3-codex"
+
+
+# ── Agent ↔ image pairing ─────────────────────────────────────────────────────
+
+
+def test_docker_factories_pair_each_agent_with_its_own_image(monkeypatch):
+    """``.docker()`` is the single wiring point; each one picks its own image."""
+    monkeypatch.setenv("CLAUDE_CODE_VERSION", "1.2.3")
+    monkeypatch.setenv("CODEX_VERSION", "4.5.6")
+
+    claude = ClaudeCodeHarness.docker()._executor._profile()
+    codex = CodexHarness.docker()._executor._profile()
+
+    assert claude.image == "tea-claude-code:1.2.3"
+    assert codex.image == "tea-codex:4.5.6"
+
+
+# ── tea.executor stays Docker-free ────────────────────────────────────────────
+
+
+def test_executor_package_exposes_no_docker_symbols():
+    """The executor-agnostic layer must not re-export a concrete executor.
+
+    ``tea.executor`` re-exporting ``DockerProfile`` made the abstract types
+    unreachable without ``tea.executor.docker_executor`` — and so without the
+    Docker SDK — which is precisely what the abstraction exists to avoid. Both
+    Docker types are importable from ``tea.executor.docker_executor`` only.
+
+    (Loading them out-of-process to prove the SDK is never imported is not
+    possible: ``import tea.executor`` first executes ``tea/__init__.py``, the
+    convenience namespace, which deliberately eager-imports everything.)
+    """
+    assert "DockerProfile" not in tea.executor.__all__
+    assert "DockerExecutor" not in tea.executor.__all__
+    assert not hasattr(tea.executor, "DockerProfile")
+    assert not hasattr(tea.executor, "DockerExecutor")
 
 
 # ── Agents catalog ────────────────────────────────────────────────────────────

@@ -66,6 +66,13 @@ returns a `RawResult`; `Agent.parse()` turns that into an `AgentRun`.
 `Harness._execute()` wires these three calls together. `RunBuilder` wraps
 `Harness` with a fluent API and handles workdir snapshotting and file diffing.
 
+An agent only runs correctly inside the image built for it, and nothing in the
+type system enforces that pairing — so it lives in exactly one place per agent:
+`ClaudeCodeHarness.docker()`, `CodexHarness.docker()`, `PiHarness.with_model()`.
+Build harnesses through those, not by calling `Harness(agent, DockerExecutor(...))`
+directly. `tea.executor` holds the executor-agnostic types only; `DockerProfile`
+and `DockerExecutor` come from `tea.executor.docker_executor`.
+
 ### Judge
 
 A separate call path invoked only when `check_output_score()` / `check_run_score()`

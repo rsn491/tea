@@ -1,8 +1,8 @@
-from tea.executor.docker_executor import DockerExecutor
-
 from .agent import Agent as Agent
-from .claude_code import ClaudeCode, ClaudeCodeHarness, _claude_docker_profile
-from .codex import Codex, CodexHarness, _codex_docker_profile
+from .claude_code import ClaudeCode as ClaudeCode
+from .claude_code import ClaudeCodeHarness
+from .codex import Codex as Codex
+from .codex import CodexHarness
 from .harness import Harness as Harness
 from .pi import Pi as Pi
 from .pi import PiConfig as PiConfig
@@ -35,21 +35,11 @@ class Agents:
     **Opt-out.** Pass ``skills_sources=[]`` to disable skill loading entirely.
     """
 
-    ClaudeCode: ClaudeCodeHarness = ClaudeCodeHarness(
-        ClaudeCode(), DockerExecutor(_claude_docker_profile)
-    )
-    Codex: CodexHarness = CodexHarness(Codex(), DockerExecutor(_codex_docker_profile))
+    ClaudeCode: ClaudeCodeHarness = ClaudeCodeHarness.docker()
+    Codex: CodexHarness = CodexHarness.docker()
     Pi: PiHarness = PiHarness()
 
     def __init__(self, *, skills_sources: list[str] | None = None) -> None:
-        self.ClaudeCode = ClaudeCodeHarness(
-            ClaudeCode(),
-            DockerExecutor(_claude_docker_profile),
-            skills_sources=skills_sources,
-        )
-        self.Codex = CodexHarness(
-            Codex(),
-            DockerExecutor(_codex_docker_profile),
-            skills_sources=skills_sources,
-        )
+        self.ClaudeCode = ClaudeCodeHarness.docker(skills_sources=skills_sources)
+        self.Codex = CodexHarness.docker(skills_sources=skills_sources)
         self.Pi = PiHarness(skills_sources=skills_sources)

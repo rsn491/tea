@@ -13,7 +13,7 @@ from tea.agent.pi import (
     PiConfig,
     PiHarness,
     _build_models_json,
-    _pi_docker_profile,
+    pi_docker_profile,
 )
 from tea.executor import ExecutionSpec, RawResult
 
@@ -26,9 +26,7 @@ _ANTHROPIC_CFG = PiConfig(
 
 def test_resolve_cli_version_uses_env_var(monkeypatch):
     monkeypatch.setenv("PI_VERSION", "3.2.1")
-    resolve_cli_version.cache_clear()
     assert resolve_cli_version("pi --version", "pi", "PI_VERSION") == "3.2.1"
-    resolve_cli_version.cache_clear()
 
 
 def test_resolve_cli_version_last_resort_is_latest_date(monkeypatch):
@@ -40,13 +38,11 @@ def test_resolve_cli_version_last_resort_is_latest_date(monkeypatch):
         "tea.agent._version.subprocess.run",
         lambda *a, **kw: (_ for _ in ()).throw(FileNotFoundError()),
     )
-    resolve_cli_version.cache_clear()
     version = resolve_cli_version(
         "__no_such_cli__ --version", "__no_such_pkg__", "PI_VERSION"
     )
     expected = f"latest-{date.today().strftime('%Y%m%d')}"
     assert version == expected
-    resolve_cli_version.cache_clear()
 
 
 def test_resolve_cli_version_npm_list_scoped_package(monkeypatch):
@@ -68,9 +64,7 @@ def test_resolve_cli_version_npm_list_scoped_package(monkeypatch):
         raise FileNotFoundError(cmd[0])
 
     monkeypatch.setattr("tea.agent._version.subprocess.run", fake_run)
-    resolve_cli_version.cache_clear()
     assert resolve_cli_version("__no_cli__ --version", pkg, "PI_VERSION") == "1.2.3"
-    resolve_cli_version.cache_clear()
 
 
 def test_resolve_cli_version_npm_view_fallback(monkeypatch):
@@ -89,20 +83,16 @@ def test_resolve_cli_version_npm_view_fallback(monkeypatch):
         raise FileNotFoundError(cmd[0])
 
     monkeypatch.setattr("tea.agent._version.subprocess.run", fake_run)
-    resolve_cli_version.cache_clear()
     version = resolve_cli_version(
         "__no_such_cli__ --version", "@scope/some-pkg", "PI_VERSION"
     )
     assert version == "9.9.9"
-    resolve_cli_version.cache_clear()
 
 
 def test_pi_agent_version_uses_env_var(monkeypatch):
     """Pi.version() delegates to resolve_cli_version and picks up the env var."""
     monkeypatch.setenv("PI_VERSION", "9.8.7")
-    resolve_cli_version.cache_clear()
     assert Pi(_ANTHROPIC_CFG).version() == "9.8.7"
-    resolve_cli_version.cache_clear()
 
 
 # ── build_spec ────────────────────────────────────────────────────────────────
@@ -110,8 +100,7 @@ def test_pi_agent_version_uses_env_var(monkeypatch):
 
 def test_docker_profile_pins_versioned_image(monkeypatch):
     monkeypatch.setenv("PI_VERSION", "1.0.0")
-    resolve_cli_version.cache_clear()
-    profile = _pi_docker_profile()
+    profile = pi_docker_profile()
 
     assert profile.image == "tea-pi:1.0.0"
     assert profile.user == "node"
@@ -119,7 +108,6 @@ def test_docker_profile_pins_versioned_image(monkeypatch):
     assert "@earendil-works/pi-coding-agent@1.0.0" in profile.dockerfile
     # Skip pi's startup network operations for every run.
     assert profile.env_overrides["PI_OFFLINE"] == "1"
-    resolve_cli_version.cache_clear()
 
 
 def test_build_spec_defaults_no_base_url(monkeypatch):
@@ -141,13 +129,11 @@ def test_build_spec_defaults_no_base_url(monkeypatch):
 def test_build_spec_model_injection_is_quoted(monkeypatch):
     """A hostile model string must not break out of the pi command line."""
     monkeypatch.setenv("PI_VERSION", "1.0.0")
-    resolve_cli_version.cache_clear()
     cfg = PiConfig("ollama/qwen; touch /tmp/PWNED")
     spec = Pi(cfg).build_spec("hello", timeout=60)
     assert "--model 'ollama/qwen; touch /tmp/PWNED'" in spec.command
     sanitised = spec.command.replace("'ollama/qwen; touch /tmp/PWNED'", "SAFE")
     assert "touch /tmp/PWNED" not in sanitised
-    resolve_cli_version.cache_clear()
 
 
 def test_build_spec_forwards_api_key_env(monkeypatch):

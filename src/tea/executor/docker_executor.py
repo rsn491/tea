@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable
 
 from tea.infra import Docker, DockerRunConfig
 
@@ -22,6 +22,10 @@ class DockerProfile:
     dockerfile: str | None = None  # when set, the image is built on first use
     user: str | None = None
     env_overrides: dict[str, str] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if not self.image:
+            raise ValueError("DockerProfile.image must be a non-empty image tag")
 
 
 class DockerExecutor(Executor):

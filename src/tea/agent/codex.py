@@ -5,6 +5,7 @@ import os
 import re
 import shlex
 from dataclasses import replace
+from typing import Self
 
 from tea.executor import ExecutionSpec, RawResult
 from tea.executor.docker_executor import DockerExecutor, DockerProfile
@@ -13,7 +14,7 @@ from ._utils import _sanitize_env_value
 from ._version import resolve_cli_version
 from .agent import Agent
 from .agent_run import AgentRun, Step, StepType, ToolCall
-from .harness import ApiKeyHarness, Harness
+from .harness import ApiKeyHarness
 
 _NODE_VERSION = "22"
 _CODEX_PACKAGE = "@openai/codex"
@@ -37,8 +38,12 @@ def _dockerfile(version: str) -> str:
     )
 
 
-def _codex_docker_profile() -> DockerProfile:
-    """Static Docker knowledge for Codex, resolved lazily (see ClaudeCode)."""
+def codex_docker_profile() -> DockerProfile:
+    """Static Docker knowledge for Codex, resolved lazily (see ClaudeCode).
+
+    Prefer ``CodexHarness.docker()`` over wiring this into a ``DockerExecutor``
+    by hand — see that method for why.
+    """
     version = _resolve_version()
     return DockerProfile(
         image=f"tea-codex:{version}",
@@ -57,6 +62,10 @@ class Codex(Agent):
     @property
     def model(self) -> str:
         return self._model
+
+    def copy(self, *, model: str | None = None) -> Self:
+        """Return a copy with the given fields overridden, keeping the rest."""
+        return type(self)(model=self._model if model is None else model)
 
     def build_spec(self, prompt: str, timeout: int) -> ExecutionSpec:
         env: dict[str, str] = {}
@@ -111,21 +120,36 @@ class Codex(Agent):
 
 
 class CodexHarness(ApiKeyHarness):
-    def with_model(self, model: str) -> Harness:
-        return Harness(
-            Codex(model=model),
-            DockerExecutor(_codex_docker_profile),
+    @classmethod
+    def docker(
+        cls, agent: Codex | None = None, *, skills_sources: list[str] | None = None
+    ) -> Self:
+        """Pair a ``Codex`` agent with the Docker image built for it.
+
+        The single place agent and image are wired together — see
+        ``ClaudeCodeHarness.docker``.
+        """
+        return cls(
+            agent if agent is not None else Codex(),
+            DockerExecutor(codex_docker_profile),
+            skills_sources=skills_sources,
+        )
+
+    def with_model(self, model: str) -> Self:
+        return type(self).docker(
+            self._codex_agent().copy(model=model),
             skills_sources=self.skills_sources,
         )
 
-    def with_api_key(self) -> Harness:
-        agent = self._agent
-        model = agent.model if isinstance(agent, Codex) else _DEFAULT_MODEL
-        return Harness(
-            Codex(model=model),
-            DockerExecutor(_codex_docker_profile),
+    def with_api_key(self) -> Self:
+        return type(self).docker(
+            self._codex_agent().copy(),
             skills_sources=self.skills_sources,
         )
+
+    def _codex_agent(self) -> Codex:
+        agent = self._agent
+        return agent if isinstance(agent, Codex) else Codex()
 
 
 def _skill_setup(skills: list[str], source_for: dict[str, str]) -> str:
