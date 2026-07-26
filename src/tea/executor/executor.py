@@ -3,6 +3,12 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
+# Where an executor makes the run's workdir visible to the command. This is
+# part of the executor contract, not a Docker detail: agents build absolute
+# paths against it (skill copies, setup commands), so every executor must
+# honour it — Docker bind-mounts here, a subprocess executor would chdir here.
+WORKDIR_MOUNT = "/workspace"
+
 
 @dataclass
 class ExecutionRequirements:

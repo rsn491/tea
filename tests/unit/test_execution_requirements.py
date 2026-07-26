@@ -9,8 +9,14 @@ from tea.agent import Agents
 from tea.agent.claude_code import ClaudeCode, ClaudeCodeHarness, claude_docker_profile
 from tea.agent.codex import Codex, CodexHarness, codex_docker_profile
 from tea.agent.harness import Harness
-from tea.agent.pi import Pi, PiConfig, PiHarness
-from tea.executor import ExecutionRequirements, ExecutionSpec
+from tea.agent.pi import Pi, PiConfig, PiHarness, pi_docker_profile
+from tea.executor import (
+    WORKDIR_MOUNT,
+    ExecutionRequirements,
+    ExecutionSpec,
+    Executor,
+    RawResult,
+)
 from tea.executor.docker_executor import DockerExecutor, DockerProfile
 from tea.infra import DockerRunConfig, DockerRunResult
 
@@ -114,13 +120,12 @@ def test_docker_executor_accepts_profile_factory():
 
 def test_claude_docker_profile_pins_versioned_image(monkeypatch):
     monkeypatch.setenv("CLAUDE_CODE_VERSION", "1.2.3")
-    profile = claude_docker_profile()
+    profile = claude_docker_profile(ClaudeCode())
 
     assert profile.image == "tea-claude-code:1.2.3"
     assert profile.user == "node"
     assert "FROM node:22" in profile.dockerfile
     assert "@anthropic-ai/claude-code@1.2.3" in profile.dockerfile
-    assert profile.env_overrides["HOME"] == "/home/node"
 
 
 def test_claude_code_agent_version_uses_env_var(monkeypatch):
@@ -131,13 +136,12 @@ def test_claude_code_agent_version_uses_env_var(monkeypatch):
 
 def test_codex_docker_profile_pins_versioned_image(monkeypatch):
     monkeypatch.setenv("CODEX_VERSION", "4.5.6")
-    profile = codex_docker_profile()
+    profile = codex_docker_profile(Codex())
 
     assert profile.image == "tea-codex:4.5.6"
     assert profile.user == "node"
     assert "FROM node:22" in profile.dockerfile
     assert "@openai/codex@4.5.6" in profile.dockerfile
-    assert profile.env_overrides["HOME"] == "/home/node"
 
 
 def test_codex_agent_version_uses_env_var(monkeypatch):
@@ -164,6 +168,24 @@ def test_no_host_network_no_extra_hosts():
 
 
 # ── extra_mounts ──────────────────────────────────────────────────────────────
+
+
+def test_workdir_is_mounted_at_the_contract_path(tmp_path):
+    """``WORKDIR_MOUNT`` is the shared contract, not a DockerExecutor private.
+
+    Agents build absolute paths against it when installing skills, so an
+    executor that mounted the workdir anywhere else would break them.
+    """
+    fake = _run(DockerProfile(image="node:22"), ExecutionSpec(command="run"), tmp_path)
+    assert fake.configs[0].volumes[tmp_path] == WORKDIR_MOUNT
+    assert fake.configs[0].container_workdir == WORKDIR_MOUNT
+
+
+def test_agents_install_skills_against_the_contract_path(tmp_path):
+    spec, _ = Codex().install_skills(
+        ExecutionSpec(command="noop"), "task", str(tmp_path), ["s"], {"s": "skills"}
+    )
+    assert f"{WORKDIR_MOUNT}/skills/s/SKILL.md" in spec.setup_command
 
 
 def test_extra_mounts_added_to_volumes(tmp_path):
@@ -327,6 +349,108 @@ def test_docker_factories_pair_each_agent_with_its_own_image(monkeypatch):
 
     assert claude.image == "tea-claude-code:1.2.3"
     assert codex.image == "tea-codex:4.5.6"
+
+
+# ── version() drives the image ───────────────────────────────────────────────
+#
+# The profile factory reads the version off the agent it is given, so the
+# version an agent reports as run metadata is the version that actually runs.
+# Resolving it from the module instead would let the two drift silently.
+
+
+class _PinnedClaude(ClaudeCode):
+    def version(self) -> str:
+        return "0.0.1-pinned"
+
+
+def test_agent_version_override_drives_the_image(monkeypatch):
+    monkeypatch.setenv("CLAUDE_CODE_VERSION", "1.2.3")  # would win if consulted
+    agent = _PinnedClaude()
+    harness = ClaudeCodeHarness.docker(agent)
+    profile = harness._executor._profile()
+
+    assert agent.version() == "0.0.1-pinned"
+    assert profile.image == "tea-claude-code:0.0.1-pinned"
+    assert "@anthropic-ai/claude-code@0.0.1-pinned" in profile.dockerfile
+
+
+def test_with_model_rebinds_the_profile_to_the_new_agent(monkeypatch):
+    """The rebuilt harness's profile tracks the agent it was rebuilt around."""
+    monkeypatch.setenv("CLAUDE_CODE_VERSION", "1.2.3")  # would win if consulted
+    harness = ClaudeCodeHarness.docker(_PinnedClaude()).with_model("claude-opus-4-7")
+
+    # copy() preserves the subclass, so the pin survives — and the image with it.
+    assert harness._agent.model == "claude-opus-4-7"
+    assert harness._agent.version() == "0.0.1-pinned"
+    assert harness._executor._profile().image == "tea-claude-code:0.0.1-pinned"
+
+
+# ── a caller-supplied executor survives the factories ────────────────────────
+
+
+class _RecordingExecutor(Executor):
+    """A non-Docker executor, to prove the factories don't force Docker back."""
+
+    def __init__(self) -> None:
+        self.specs: list[ExecutionSpec] = []
+
+    def run(self, spec: ExecutionSpec, workdir: str | None) -> RawResult:
+        self.specs.append(spec)
+        return RawResult("", "", 0)
+
+
+@pytest.mark.parametrize(
+    "harness_cls, agent_cls, select",
+    [
+        (ClaudeCodeHarness, ClaudeCode, lambda h: h.with_model("claude-opus-4-7")),
+        (ClaudeCodeHarness, ClaudeCode, lambda h: h.with_api_key()),
+        (CodexHarness, Codex, lambda h: h.with_model("gpt-5.3-codex")),
+        (CodexHarness, Codex, lambda h: h.with_api_key()),
+    ],
+)
+def test_factories_keep_a_custom_executor(harness_cls, agent_cls, select):
+    executor = _RecordingExecutor()
+    rebuilt = select(harness_cls(agent_cls(), executor))
+    assert rebuilt._executor is executor
+
+
+def test_factories_rebuild_a_docker_executor():
+    """The Docker path still gets a fresh executor bound to the new agent."""
+    base = ClaudeCodeHarness.docker()
+    rebuilt = base.with_model("claude-opus-4-7")
+    assert isinstance(rebuilt._executor, DockerExecutor)
+    assert rebuilt._executor is not base._executor
+
+
+# ── specs carry the env their command needs ──────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "agent",
+    [
+        ClaudeCode(),
+        Codex(),
+        Pi(PiConfig("anthropic/claude-sonnet-4-6")),
+    ],
+)
+def test_spec_env_is_self_sufficient(agent):
+    """A spec must run correctly under an executor that has no DockerProfile.
+
+    ``HOME`` and ``NPM_CONFIG_PREFIX`` are process environment, not container
+    configuration: the command embeds absolute paths under both. Keeping them
+    in the profile would make every non-Docker executor silently wrong.
+    """
+    spec = agent.build_spec("hello", timeout=60)
+    assert spec.env["HOME"] == "/home/node"
+    assert spec.env["NPM_CONFIG_PREFIX"] == "/home/node/.npm-global"
+    assert spec.command.startswith(spec.env["NPM_CONFIG_PREFIX"] + "/bin/")
+
+
+def test_docker_profiles_carry_no_agent_env():
+    """Profiles hold image-level knowledge only; agent env travels in the spec."""
+    assert claude_docker_profile(ClaudeCode()).env_overrides == {}
+    assert codex_docker_profile(Codex()).env_overrides == {}
+    assert pi_docker_profile(Pi(PiConfig("anthropic/x"))).env_overrides == {}
 
 
 # ── tea.executor stays Docker-free ────────────────────────────────────────────

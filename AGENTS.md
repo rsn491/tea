@@ -66,12 +66,32 @@ returns a `RawResult`; `Agent.parse()` turns that into an `AgentRun`.
 `Harness._execute()` wires these three calls together. `RunBuilder` wraps
 `Harness` with a fluent API and handles workdir snapshotting and file diffing.
 
-An agent only runs correctly inside the image built for it, and nothing in the
-type system enforces that pairing — so it lives in exactly one place per agent:
-`ClaudeCodeHarness.docker()`, `CodexHarness.docker()`, `PiHarness.with_model()`.
-Build harnesses through those, not by calling `Harness(agent, DockerExecutor(...))`
-directly. `tea.executor` holds the executor-agnostic types only; `DockerProfile`
-and `DockerExecutor` come from `tea.executor.docker_executor`.
+An agent only runs correctly inside the image built for it, so that pairing
+lives in exactly one place per agent: `ClaudeCodeHarness.docker()`,
+`CodexHarness.docker()`, `PiHarness.with_model()`. Build harnesses through
+those, not by calling `Harness(agent, DockerExecutor(...))` directly. Each
+profile factory takes its agent (`claude_docker_profile(agent: ClaudeCode)`),
+so a mismatched pairing is a type error and the image tag always comes from
+`agent.version()`. `tea.executor` holds the executor-agnostic types only;
+`DockerProfile` and `DockerExecutor` come from `tea.executor.docker_executor`.
+
+What goes where matters when adding an agent or an executor:
+
+* **`ExecutionSpec`** — everything the command needs to run: the command, the
+  process environment it depends on (`HOME`, `NPM_CONFIG_PREFIX`, CLI-specific
+  flags like `PI_OFFLINE`), per-run setup, and declared `ExecutionRequirements`.
+  A spec must be runnable by *any* executor.
+* **`DockerProfile`** — how the container is built and entered: image tag,
+  dockerfile, user. Docker-only, one per agent.
+* **`WORKDIR_MOUNT`** (`tea.executor`) — where the run's workdir appears to the
+  command. Part of the executor contract, not a `DockerExecutor` detail: agents
+  build absolute paths against it when installing skills, so every executor
+  must honour it.
+
+Agents still assume a container filesystem layout (`/home/node`, the mount
+point) — the Docker *knobs* left agent code, but that shared layout is a real
+contract between agent and executor, and `WORKDIR_MOUNT` is where it is stated
+rather than duplicated.
 
 ### Judge
 

@@ -19,6 +19,7 @@ from tea.checkers import (
     check_tool_used,
 )
 from tea.executor import (
+    WORKDIR_MOUNT,
     ExecutionRequirements,
     ExecutionSpec,
     Executor,
@@ -43,6 +44,7 @@ __all__ = [
     "Executor",
     "ExecutionSpec",
     "ExecutionRequirements",
+    "WORKDIR_MOUNT",
     "RawResult",
     "ApiKeyHarness",
     "Harness",

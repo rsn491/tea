@@ -7,6 +7,7 @@ from dataclasses import replace
 from typing import Self
 
 from tea.executor import (
+    WORKDIR_MOUNT,
     ExecutionRequirements,
     ExecutionSpec,
     RawResult,
@@ -24,10 +25,8 @@ _CLAUDE_CODE_PACKAGE = "@anthropic-ai/claude-code"
 _CLAUDE_CODE_VERSION_ENV = "CLAUDE_CODE_VERSION"
 _DEFAULT_MAX_TURNS = 25
 _DEFAULT_MODEL = "claude-haiku-4-5-20251001"
-_NPM_PREFIX = "/home/node/.npm-global"
-
-# DockerExecutor mounts the workdir at this path; install_skills relies on it.
-_CONTAINER_WORKDIR = "/workspace"
+_CONTAINER_HOME = "/home/node"
+_NPM_PREFIX = f"{_CONTAINER_HOME}/.npm-global"
 # Where Claude Code's CLI looks for project skills inside the container cwd.
 _CLAUDE_NATIVE_PROJECT_SKILLS = ".claude/skills"
 
@@ -46,20 +45,22 @@ def _dockerfile(version: str) -> str:
     )
 
 
-def claude_docker_profile() -> DockerProfile:
-    """Static Docker knowledge for Claude Code, resolved lazily.
+def claude_docker_profile(agent: ClaudeCode) -> DockerProfile:
+    """Static Docker knowledge for Claude Code, built for a specific agent.
 
-    A callable (not a constant) so the version probe — a subprocess — runs at
-    execution time, never at import time. Prefer ``ClaudeCodeHarness.docker()``
-    over wiring this into a ``DockerExecutor`` by hand: the agent and its image
-    must match, and that pairing lives in exactly one place.
+    Called through a zero-arg closure so the version probe — a subprocess —
+    runs at execution time, never at import time. The tag comes from
+    ``agent.version()``, so what the agent reports as run metadata and what
+    the executor actually runs cannot drift apart; taking the agent as a
+    typed parameter is also what makes pairing it with a foreign agent a
+    type error. Prefer ``ClaudeCodeHarness.docker()`` over wiring this into
+    a ``DockerExecutor`` by hand.
     """
-    version = _resolve_version()
+    version = agent.version()
     return DockerProfile(
         image=f"tea-claude-code:{version}",
         dockerfile=_dockerfile(version),
         user="node",
-        env_overrides={"HOME": "/home/node", "NPM_CONFIG_PREFIX": _NPM_PREFIX},
     )
 
 
@@ -99,7 +100,13 @@ class ClaudeCode(Agent):
         )
 
     def build_spec(self, prompt: str, timeout: int) -> ExecutionSpec:
-        env: dict[str, str] = {}
+        # The environment the claude CLI itself needs, independent of who runs
+        # it: any executor handed this spec must set it, so it belongs here
+        # rather than in a Docker profile.
+        env: dict[str, str] = {
+            "HOME": _CONTAINER_HOME,
+            "NPM_CONFIG_PREFIX": _NPM_PREFIX,
+        }
         if key := os.environ.get("ANTHROPIC_API_KEY"):
             env["ANTHROPIC_API_KEY"] = key
         if token := os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"):
@@ -134,14 +141,14 @@ class ClaudeCode(Agent):
         Skills discovered in that native path need no copy; skills from any
         other source are translated into the path the CLI scans.
         """
-        dst_base = f"{_CONTAINER_WORKDIR}/{_CLAUDE_NATIVE_PROJECT_SKILLS}"
+        dst_base = f"{WORKDIR_MOUNT}/{_CLAUDE_NATIVE_PROJECT_SKILLS}"
         cmds: list[str] = []
         for name in skills:
             src_dir = source_for[name]
             if os.path.normpath(src_dir) == _CLAUDE_NATIVE_PROJECT_SKILLS:
                 continue
             q = shlex.quote(name)
-            src = f"{shlex.quote(f'{_CONTAINER_WORKDIR}/{src_dir}')}/{q}/SKILL.md"
+            src = f"{shlex.quote(f'{WORKDIR_MOUNT}/{src_dir}')}/{q}/SKILL.md"
             dst_dir = f"{shlex.quote(dst_base)}/{q}"
             cmds.append(f"mkdir -p {dst_dir} && cp {src} {dst_dir}/SKILL.md")
         if not cmds:
@@ -242,23 +249,30 @@ class ClaudeCodeHarness(ApiKeyHarness):
         ``ClaudeCodeHarness(ClaudeCode(), DockerExecutor(some_other_profile))``
         by hand type-checks but runs the Claude CLI inside a foreign image.
         """
+        agent = agent if agent is not None else ClaudeCode()
         return cls(
-            agent if agent is not None else ClaudeCode(),
-            DockerExecutor(claude_docker_profile),
+            agent,
+            DockerExecutor(lambda: claude_docker_profile(agent)),
             skills_sources=skills_sources,
         )
 
     def with_model(self, model: str) -> Self:
-        return type(self).docker(
-            self._claude_agent().copy(model=model),
-            skills_sources=self.skills_sources,
-        )
+        return self._rebuild(self._claude_agent().copy(model=model))
 
     def with_api_key(self) -> Self:
-        return type(self).docker(
-            self._claude_agent().copy(),
-            skills_sources=self.skills_sources,
-        )
+        return self._rebuild(self._claude_agent().copy())
+
+    def _rebuild(self, agent: ClaudeCode) -> Self:
+        """Re-wire this harness around ``agent``, keeping a custom executor.
+
+        A ``DockerExecutor`` must be rebuilt so its profile follows the new
+        agent — the image tag is derived from it. Any other executor was
+        chosen deliberately by the caller, so selecting a model must not
+        silently drag the run back into Docker.
+        """
+        if isinstance(self._executor, DockerExecutor):
+            return type(self).docker(agent, skills_sources=self.skills_sources)
+        return type(self)(agent, self._executor, skills_sources=self.skills_sources)
 
     def _claude_agent(self) -> ClaudeCode:
         agent = self._agent

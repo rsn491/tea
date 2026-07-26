@@ -7,7 +7,7 @@ import shlex
 from dataclasses import replace
 from typing import Self
 
-from tea.executor import ExecutionSpec, RawResult
+from tea.executor import WORKDIR_MOUNT, ExecutionSpec, RawResult
 from tea.executor.docker_executor import DockerExecutor, DockerProfile
 
 from ._utils import _sanitize_env_value
@@ -20,10 +20,9 @@ _NODE_VERSION = "22"
 _CODEX_PACKAGE = "@openai/codex"
 _CODEX_VERSION_ENV = "CODEX_VERSION"
 _DEFAULT_MODEL = "gpt-5.2-codex"
-_NPM_PREFIX = "/home/node/.npm-global"
-
-# DockerExecutor mounts the workdir at this path; install_skills relies on it.
-_CONTAINER_WORKDIR = "/workspace"
+_CONTAINER_HOME = "/home/node"
+_NPM_PREFIX = f"{_CONTAINER_HOME}/.npm-global"
+_CODEX_NATIVE_SKILLS_DIR = f"{_CONTAINER_HOME}/.codex/skills"
 
 
 def _resolve_version() -> str:
@@ -38,18 +37,17 @@ def _dockerfile(version: str) -> str:
     )
 
 
-def codex_docker_profile() -> DockerProfile:
+def codex_docker_profile(agent: Codex) -> DockerProfile:
     """Static Docker knowledge for Codex, resolved lazily (see ClaudeCode).
 
     Prefer ``CodexHarness.docker()`` over wiring this into a ``DockerExecutor``
     by hand — see that method for why.
     """
-    version = _resolve_version()
+    version = agent.version()
     return DockerProfile(
         image=f"tea-codex:{version}",
         dockerfile=_dockerfile(version),
         user="node",
-        env_overrides={"HOME": "/home/node", "NPM_CONFIG_PREFIX": _NPM_PREFIX},
     )
 
 
@@ -68,7 +66,13 @@ class Codex(Agent):
         return type(self)(model=self._model if model is None else model)
 
     def build_spec(self, prompt: str, timeout: int) -> ExecutionSpec:
-        env: dict[str, str] = {}
+        # The environment the codex CLI itself needs, independent of who runs
+        # it: any executor handed this spec must set it, so it belongs here
+        # rather than in a Docker profile.
+        env: dict[str, str] = {
+            "HOME": _CONTAINER_HOME,
+            "NPM_CONFIG_PREFIX": _NPM_PREFIX,
+        }
         # API-key auth: forward OPENAI_API_KEY (recommended for programmatic use).
         if api_key := os.environ.get("OPENAI_API_KEY"):
             env["OPENAI_API_KEY"] = api_key
@@ -129,23 +133,24 @@ class CodexHarness(ApiKeyHarness):
         The single place agent and image are wired together — see
         ``ClaudeCodeHarness.docker``.
         """
+        agent = agent if agent is not None else Codex()
         return cls(
-            agent if agent is not None else Codex(),
-            DockerExecutor(codex_docker_profile),
+            agent,
+            DockerExecutor(lambda: codex_docker_profile(agent)),
             skills_sources=skills_sources,
         )
 
     def with_model(self, model: str) -> Self:
-        return type(self).docker(
-            self._codex_agent().copy(model=model),
-            skills_sources=self.skills_sources,
-        )
+        return self._rebuild(self._codex_agent().copy(model=model))
 
     def with_api_key(self) -> Self:
-        return type(self).docker(
-            self._codex_agent().copy(),
-            skills_sources=self.skills_sources,
-        )
+        return self._rebuild(self._codex_agent().copy())
+
+    def _rebuild(self, agent: Codex) -> Self:
+        """Re-wire this harness around ``agent`` — see ``ClaudeCodeHarness``."""
+        if isinstance(self._executor, DockerExecutor):
+            return type(self).docker(agent, skills_sources=self.skills_sources)
+        return type(self)(agent, self._executor, skills_sources=self.skills_sources)
 
     def _codex_agent(self) -> Codex:
         agent = self._agent
@@ -165,10 +170,10 @@ def _skill_setup(skills: list[str], source_for: dict[str, str]) -> str:
         # shell strips the quotes. Reject any name containing a path separator.
         if "/" in name or "\\" in name or name in (".", ".."):
             raise ValueError(f"Invalid skill name: {name!r}")
-        src_base = f"{_CONTAINER_WORKDIR}/{source_for[name]}"
+        src_base = f"{WORKDIR_MOUNT}/{source_for[name]}"
         quoted = shlex.quote(name)
         src = f"{shlex.quote(src_base)}/{quoted}/SKILL.md"
-        dst_dir = f"/home/node/.codex/skills/{quoted}"
+        dst_dir = f"{_CODEX_NATIVE_SKILLS_DIR}/{quoted}"
         cmds.append(f"mkdir -p {dst_dir} && cp {src} {dst_dir}/SKILL.md")
     return " && ".join(cmds)
 

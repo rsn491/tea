@@ -21,11 +21,12 @@ class Agent(ABC):
 
     @abstractmethod
     def version(self) -> str:
-        """Return the CLI tool version this agent will run inside Docker.
+        """Return the CLI tool version this agent runs.
 
         Resolution is agent-specific (env var override → CLI probe → npm → fallback).
-        Used by each agent's Docker profile factory to build a versioned image
-        tag, and available to callers as run metadata.
+        Each agent's Docker profile factory reads it off the agent to build the
+        versioned image tag, so overriding this changes the image that actually
+        runs — the reported version and the executed one cannot drift apart.
         """
         ...
 

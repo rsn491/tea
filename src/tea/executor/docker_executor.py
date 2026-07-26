@@ -5,9 +5,7 @@ from dataclasses import dataclass, field
 
 from tea.infra import Docker, DockerRunConfig
 
-from .executor import ExecutionSpec, Executor, RawResult
-
-_CONTAINER_WORKDIR = "/workspace"
+from .executor import WORKDIR_MOUNT, ExecutionSpec, Executor, RawResult
 
 
 @dataclass
@@ -49,7 +47,7 @@ class DockerExecutor(Executor):
         if profile.dockerfile:
             self._docker.create_image(profile.image, profile.dockerfile)
 
-        volumes = {workdir: _CONTAINER_WORKDIR} if workdir else {}
+        volumes = {workdir: WORKDIR_MOUNT} if workdir else {}
         volumes.update(spec.requirements.extra_mounts)
         env = {**profile.env_overrides, **spec.env}
         extra_hosts: dict[str, str] = {}
@@ -68,7 +66,7 @@ class DockerExecutor(Executor):
             env=env,
             timeout=spec.timeout,
             volumes=volumes,
-            container_workdir=_CONTAINER_WORKDIR if workdir else None,
+            container_workdir=WORKDIR_MOUNT if workdir else None,
             user=profile.user,
             extra_hosts=extra_hosts,
         )

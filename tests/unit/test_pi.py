@@ -100,14 +100,12 @@ def test_pi_agent_version_uses_env_var(monkeypatch):
 
 def test_docker_profile_pins_versioned_image(monkeypatch):
     monkeypatch.setenv("PI_VERSION", "1.0.0")
-    profile = pi_docker_profile()
+    profile = pi_docker_profile(Pi(_ANTHROPIC_CFG))
 
     assert profile.image == "tea-pi:1.0.0"
     assert profile.user == "node"
     assert "FROM node:22" in profile.dockerfile
     assert "@earendil-works/pi-coding-agent@1.0.0" in profile.dockerfile
-    # Skip pi's startup network operations for every run.
-    assert profile.env_overrides["PI_OFFLINE"] == "1"
 
 
 def test_build_spec_defaults_no_base_url(monkeypatch):
@@ -117,6 +115,11 @@ def test_build_spec_defaults_no_base_url(monkeypatch):
     assert spec.timeout == 60
     assert spec.requirements.host_network_access is False
     assert spec.setup_command is None
+    # The env the pi CLI needs travels with the spec, so it survives being
+    # handed to any executor — not just the one carrying a DockerProfile.
+    assert spec.env["HOME"] == "/home/node"
+    assert spec.env["NPM_CONFIG_PREFIX"] == "/home/node/.npm-global"
+    assert spec.env["PI_OFFLINE"] == "1"
     assert "--model anthropic/claude-sonnet-4-6" in spec.command
     # These flags are load-bearing: without --print pi opens a TUI and exits
     # silently; without --mode json parse() finds no events and returns empty

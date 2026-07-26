@@ -9,6 +9,7 @@ from dataclasses import dataclass, replace
 import yaml
 
 from tea.executor import (
+    WORKDIR_MOUNT,
     ExecutionRequirements,
     ExecutionSpec,
     RawResult,
@@ -26,11 +27,10 @@ _log = logging.getLogger(__name__)
 _NODE_VERSION = "22"
 _PI_PACKAGE = "@earendil-works/pi-coding-agent"
 _PI_VERSION_ENV = "PI_VERSION"
-_NPM_PREFIX = "/home/node/.npm-global"
+_CONTAINER_HOME = "/home/node"
+_NPM_PREFIX = f"{_CONTAINER_HOME}/.npm-global"
 
-# DockerExecutor mounts the workdir at this path; install_skills relies on it.
-_CONTAINER_WORKDIR = "/workspace"
-_PI_AGENT_DIR = "/home/node/.pi/agent"
+_PI_AGENT_DIR = f"{_CONTAINER_HOME}/.pi/agent"
 # Where Pi auto-discovers user-level skills inside the container — see
 # https://pi.dev/docs/latest/skills (directories containing SKILL.md are
 # scanned recursively).
@@ -49,24 +49,13 @@ def _dockerfile(version: str) -> str:
     )
 
 
-def pi_docker_profile() -> DockerProfile:
-    """Static Docker knowledge for Pi, resolved lazily (see ClaudeCode).
-
-    ``PiHarness.with_model`` is the only place this is paired with a ``Pi``
-    agent; keep it that way so the agent and its image cannot diverge.
-    """
-    version = _resolve_version()
+def pi_docker_profile(agent: Pi) -> DockerProfile:
+    """Static Docker knowledge for Pi, resolved lazily (see ClaudeCode)."""
+    version = agent.version()
     return DockerProfile(
         image=f"tea-pi:{version}",
         dockerfile=_dockerfile(version),
         user="node",
-        env_overrides={
-            "HOME": "/home/node",
-            "NPM_CONFIG_PREFIX": _NPM_PREFIX,
-            # Skip pi's startup network operations (update/registry checks) —
-            # they add latency and flakiness; model calls are unaffected.
-            "PI_OFFLINE": "1",
-        },
     )
 
 
@@ -102,7 +91,16 @@ class Pi(Agent):
         self._model_config = model_config
 
     def build_spec(self, prompt: str, timeout: int) -> ExecutionSpec:
-        env: dict[str, str] = {}
+        # The environment the pi CLI itself needs, independent of who runs it:
+        # any executor handed this spec must set it, so it belongs here rather
+        # than in a Docker profile.
+        env: dict[str, str] = {
+            "HOME": _CONTAINER_HOME,
+            "NPM_CONFIG_PREFIX": _NPM_PREFIX,
+            # Skip pi's startup network operations (update/registry checks) —
+            # they add latency and flakiness; model calls are unaffected.
+            "PI_OFFLINE": "1",
+        }
         api_key: str | None = None
         if self._model_config.api_key_env:
             if key := os.environ.get(self._model_config.api_key_env):
@@ -209,9 +207,10 @@ class PiHarness:
         )
 
     def with_model(self, config: PiConfig) -> Harness:
+        agent = Pi(model_config=config)
         return Harness(
-            Pi(model_config=config),
-            DockerExecutor(pi_docker_profile),
+            agent,
+            DockerExecutor(lambda: pi_docker_profile(agent)),
             skills_sources=self._skills_sources,
         )
 
@@ -324,7 +323,7 @@ def _skill_setup(skills: list[str], source_for: dict[str, str]) -> str:
         if "/" in name or "\\" in name or name in (".", ".."):
             raise ValueError(f"Invalid skill name: {name!r}")
         quoted = shlex.quote(name)
-        src_base = f"{_CONTAINER_WORKDIR}/{source_for[name]}"
+        src_base = f"{WORKDIR_MOUNT}/{source_for[name]}"
         src = f"{shlex.quote(src_base)}/{quoted}"
         cmds.append(f"cp -R {src} {_PI_NATIVE_SKILLS_DIR}/")
     return " && ".join(cmds)

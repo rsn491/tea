@@ -6,6 +6,7 @@ are imported from — ``tea.executor.docker_executor``.
 """
 
 from .executor import (
+    WORKDIR_MOUNT,
     ExecutionRequirements,
     ExecutionSpec,
     Executor,
@@ -17,4 +18,5 @@ __all__ = [
     "ExecutionSpec",
     "ExecutionRequirements",
     "RawResult",
+    "WORKDIR_MOUNT",
 ]
