@@ -31,6 +31,17 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="N",
         help="number of tests to run concurrently (default: 1)",
     )
+    parser.add_argument(
+        "--summary-export",
+        metavar="PATH",
+        help="write per-test metrics to a JSON baseline after the run",
+    )
+    parser.add_argument(
+        "--baseline",
+        metavar="PATH",
+        help="compare this run against a stored baseline and report regressions "
+        "(warn-only; does not affect exit code)",
+    )
     return parser
 
 
@@ -44,7 +55,13 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     print_banner()
     try:
-        ok = run(args.target, args.iterations, workers=args.workers)
+        ok = run(
+            args.target,
+            args.iterations,
+            workers=args.workers,
+            summary_export=args.summary_export,
+            baseline=args.baseline,
+        )
     except KeyboardInterrupt:
         print("\nInterrupted.")
         sys.exit(130)

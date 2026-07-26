@@ -3,17 +3,19 @@ from __future__ import annotations
 import importlib.util
 import sys
 import threading
-from collections import defaultdict
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
 from typing import Callable
 
 from tea._context import _active_checks, _active_collector
 from tea.agent.agent_run import AgentRun
+from tea.baseline import Baseline, TestSummary
+from tea.collect_result import _CollectResult
 from tea.infra.docker import Docker
 from tea.tui import _bold_cyan, _cyan, _dim, _Spinner
+from tea.tui.baseline_view import BaselineComparisonView
 from tea.tui.runner_view import print_test_header, print_test_results
 
 
@@ -22,23 +24,11 @@ class TestCase:
     path: Path
     fn: Callable
 
-
-def _empty_check_results() -> dict[str, list[bool]]:
-    return defaultdict(list)
-
-
-@dataclass
-class _CollectResult:
-    check_results: dict[str, list[bool]] = field(default_factory=_empty_check_results)
-    all_runs: list[AgentRun] = field(default_factory=list)
-    run_errors: list[Exception] = field(default_factory=list)
-    iterations: int = 0
-    failed_iterations: int = 0
-    max_failures: int = 0
-
     @property
-    def passed(self) -> bool:
-        return self.failed_iterations <= self.max_failures
+    def id(self) -> str:
+        """File-qualified identity, unique even when names repeat across files."""
+        name = getattr(self.fn, "__name__", repr(self.fn))
+        return f"{self.path}::{name}"
 
 
 def discover_test_files(path: Path) -> list[Path]:
@@ -88,14 +78,39 @@ def _discover_test_cases(target: str) -> list[TestCase]:
     ]
 
 
-def run(target: str, default_iterations: int = 1, workers: int = 1) -> bool:
+def run(
+    target: str,
+    default_iterations: int = 1,
+    workers: int = 1,
+    summary_export: str | None = None,
+    baseline: str | None = None,
+) -> bool:
     test_cases = _discover_test_cases(target)
     if not test_cases:
         print(f"tea: no tests found in '{target}'")
         sys.exit(1)
-    return TestRunner(iterations=default_iterations, workers=workers).run_all(
-        test_cases
-    )
+    runner = TestRunner(iterations=default_iterations, workers=workers)
+
+    # Load any existing baseline before running so that exporting and comparing
+    # to the same path in one invocation compares against the previous run
+    # rather than the one we are about to write. Reading is warn-only: a missing
+    # or malformed baseline must not fail an otherwise-passing run.
+    previous = None
+    if baseline:
+        try:
+            previous = Baseline.load(Path(baseline))
+        except (OSError, ValueError, KeyError, TypeError) as e:
+            print(f"tea: cannot read baseline '{baseline}': {e}")
+
+    ok = runner.run_all(test_cases)
+
+    current = Baseline(runner.summaries)
+    if summary_export:
+        current.write(Path(summary_export))
+    if previous is not None:
+        BaselineComparisonView(current.compare(previous)).render()
+
+    return ok
 
 
 def iterations(n: int, max_failures: int = 0) -> Callable:
@@ -121,12 +136,18 @@ class TestRunner:
     def __init__(self, iterations: int = 1, workers: int = 1) -> None:
         self._iterations = iterations
         self._workers = workers
+        self._summaries: dict[str, TestSummary] = {}
+
+    @property
+    def summaries(self) -> dict[str, TestSummary]:
+        return self._summaries
 
     def run(
         self,
         test_fn: Callable[[], None],
         iterations: int | None = None,
         max_failures: int = 0,
+        test_id: str | None = None,
     ) -> bool:
         n = iterations if iterations is not None else self._iterations
         name = getattr(test_fn, "__name__", repr(test_fn))
@@ -139,11 +160,16 @@ class TestRunner:
                 iterations=n,
                 max_failures=max_failures,
             )
-        self._report(name, result)
+        self._report(name, result, test_id)
         return result.passed
 
-    @staticmethod
-    def _report(name: str, result: _CollectResult) -> None:
+    def _report(
+        self, name: str, result: _CollectResult, test_id: str | None = None
+    ) -> None:
+        # Key the persisted summary by a file-qualified id so tests sharing a
+        # function name across files don't overwrite one another; the display
+        # still shows the bare function name.
+        self._summaries[test_id or name] = TestSummary.from_result(result)
         print_test_header(name, result.iterations)
         print_test_results(
             result.check_results,
@@ -208,7 +234,9 @@ class TestRunner:
                 last_file = tc.path
             n = getattr(tc.fn, "_tea_iterations", self._iterations)
             max_failures = getattr(tc.fn, "_tea_max_failures", 0)
-            passed = self.run(tc.fn, iterations=n, max_failures=max_failures)
+            passed = self.run(
+                tc.fn, iterations=n, max_failures=max_failures, test_id=tc.id
+            )
             ok = ok and passed
         return ok
 
@@ -267,7 +295,7 @@ class TestRunner:
                             print(f"\n  {_bold_cyan(name)}\n  error: {exc}\n")
                         else:
                             result = fut.result()
-                            self._report(name, result)
+                            self._report(name, result, test_id=tc.id)
                             ok = ok and result.passed
 
         except KeyboardInterrupt:

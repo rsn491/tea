@@ -76,6 +76,18 @@ tea examples/demo_calculator/agent-tests/test_add_new_operation.py::test_add_min
 
 See [examples/demo_calculator/agent-tests](examples/demo_calculator/agent-tests) for runnable examples.
 
+#### Metrics baselines
+
+Export per-test metrics (average token count, step count, duration, and success
+rate) to JSON, then compare later runs against it to catch regressions.
+`--baseline` is warn-only — it flags any metric that worsened by more than 10%
+but never changes the exit code.
+
+```bash
+tea examples/demo_calculator/agent-tests -n 3 --summary-export baseline.json
+tea examples/demo_calculator/agent-tests -n 3 --baseline baseline.json
+```
+
 ## Checkers
 
 - `check(label, condition)` — checks that `condition` is truthy and returns `bool`
