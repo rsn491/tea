@@ -1,36 +1,73 @@
 from __future__ import annotations
 
+from dataclasses import dataclass, field
+from typing import Callable
+
 from tea.infra import Docker, DockerRunConfig
 
-from .executor import DockerSpec, Executor, RawResult
+from .executor import ExecutionSpec, Executor, RawResult
 
 _CONTAINER_WORKDIR = "/workspace"
 
 
+@dataclass
+class DockerProfile:
+    """Static per-agent Docker knowledge: how to build and enter the container.
+
+    Everything here is independent of any single run — the dynamic, per-run
+    pieces (command, env, requirements) travel in the ``ExecutionSpec``.
+    """
+
+    image: str
+    dockerfile: str | None = None  # when set, the image is built on first use
+    user: str | None = None
+    env_overrides: dict[str, str] = field(default_factory=dict)
+
+
 class DockerExecutor(Executor):
-    def __init__(self, docker: Docker | None = None) -> None:
+    """Runs an ``ExecutionSpec`` inside a Docker container.
+
+    ``profile`` may be a ``DockerProfile`` or a zero-arg callable returning
+    one. Agents pass a callable so version resolution (which probes the CLI /
+    npm) happens lazily at run time instead of import time.
+    """
+
+    def __init__(
+        self,
+        profile: DockerProfile | Callable[[], DockerProfile],
+        docker: Docker | None = None,
+    ) -> None:
+        self._profile = profile
         self._docker = docker if docker is not None else Docker.get()
 
-    def run(self, spec: DockerSpec, workdir: str | None) -> RawResult:
-        if spec.dockerfile:
-            self._docker.create_image(spec.image, spec.dockerfile)
+    def run(self, spec: ExecutionSpec, workdir: str | None) -> RawResult:
+        profile = self._profile() if callable(self._profile) else self._profile
+        if profile.dockerfile:
+            self._docker.create_image(profile.image, profile.dockerfile)
+
         volumes = {workdir: _CONTAINER_WORKDIR} if workdir else {}
-        volumes.update(spec.extra_volumes)
-        container_cwd = _CONTAINER_WORKDIR if workdir else None
+        volumes.update(spec.requirements.extra_mounts)
+        env = {**profile.env_overrides, **spec.env}
+        extra_hosts: dict[str, str] = {}
+        if spec.requirements.host_network_access:
+            extra_hosts["host.docker.internal"] = "host-gateway"
+
         shell_cmd = (
             f"{spec.setup_command} && {spec.command}"
             if spec.setup_command
             else spec.command
         )
+
         config = DockerRunConfig(
-            image=spec.image,
+            image=profile.image,
             command=["sh", "-c", shell_cmd],
-            env=spec.env,
+            env=env,
             timeout=spec.timeout,
             volumes=volumes,
-            container_workdir=container_cwd,
-            user=spec.user,
-            extra_hosts=spec.extra_hosts,
+            container_workdir=_CONTAINER_WORKDIR if workdir else None,
+            user=profile.user,
+            extra_hosts=extra_hosts,
         )
         r = self._docker.run(config)
+
         return RawResult(r.stdout, r.stderr, r.exit_code, r.duration_s)

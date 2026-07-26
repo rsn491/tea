@@ -1,3 +1,15 @@
-from .executor import DockerSpec, ExecutionSpec, Executor, RawResult
+from .docker_executor import DockerProfile
+from .executor import (
+    ExecutionRequirements,
+    ExecutionSpec,
+    Executor,
+    RawResult,
+)
 
-__all__ = ["Executor", "ExecutionSpec", "DockerSpec", "RawResult"]
+__all__ = [
+    "Executor",
+    "ExecutionSpec",
+    "ExecutionRequirements",
+    "DockerProfile",
+    "RawResult",
+]

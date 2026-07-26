@@ -105,6 +105,13 @@ Setup `ANTHROPIC_API_KEY` (API-key auth, recommended). A long-term token
 (`CLAUDE_CODE_OAUTH_TOKEN`, generated with `claude setup-token`) is also
 supported.
 
+To pick a model, pass its identifier to `with_model()`; the default is
+`claude-haiku-4-5-20251001`:
+
+```python
+Agents.ClaudeCode.with_model("claude-opus-4-7").prompt("...").run()
+```
+
 ### Codex
 
 ```python
@@ -115,16 +122,21 @@ Agents.Codex
 ```
 
 Setup `OPENAI_API_KEY` (API-key auth) and construct the harness with
-`Agents.Codex.with_api_key()`. The default model is `gpt-5.2-codex`.
+`Agents.Codex.with_api_key()`. The default model is `gpt-5.2-codex`; pick
+another with `with_model()`:
+
+```python
+Agents.Codex.with_model("gpt-5.3-codex").prompt("...").run()
+```
 
 ### Pi
 
-Pi requires a `ModelConfig`:
+Pi requires a `PiConfig`:
 
 ```python
-from tea.agent import ModelConfig
+from tea.agent import PiConfig
 
-Agents.Pi.with_model(ModelConfig(
+Agents.Pi.with_model(PiConfig(
     model="ollama/qwen2.5-coder:1.5b",  # required
     api_key_env="MY_API_KEY",           # host env var forwarded into container
     base_url="http://localhost:11434",  # OpenAI-compatible endpoint

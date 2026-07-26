@@ -8,15 +8,16 @@ import pytest
 
 from tea.agent._version import resolve_cli_version
 from tea.agent.agent_run import AgentRun
-from tea.agent.model_config import ModelConfig
 from tea.agent.pi import (
     Pi,
+    PiConfig,
     PiHarness,
     _build_models_json,
+    _pi_docker_profile,
 )
-from tea.executor import DockerSpec, RawResult
+from tea.executor import ExecutionSpec, RawResult
 
-_ANTHROPIC_CFG = ModelConfig(
+_ANTHROPIC_CFG = PiConfig(
     "anthropic/claude-sonnet-4-6", api_key_env="ANTHROPIC_API_KEY"
 )
 
@@ -107,19 +108,27 @@ def test_pi_agent_version_uses_env_var(monkeypatch):
 # ── build_spec ────────────────────────────────────────────────────────────────
 
 
-def test_build_spec_defaults_no_base_url(monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+def test_docker_profile_pins_versioned_image(monkeypatch):
     monkeypatch.setenv("PI_VERSION", "1.0.0")
     resolve_cli_version.cache_clear()
+    profile = _pi_docker_profile()
+
+    assert profile.image == "tea-pi:1.0.0"
+    assert profile.user == "node"
+    assert "FROM node:22" in profile.dockerfile
+    assert "@earendil-works/pi-coding-agent@1.0.0" in profile.dockerfile
+    # Skip pi's startup network operations for every run.
+    assert profile.env_overrides["PI_OFFLINE"] == "1"
+    resolve_cli_version.cache_clear()
+
+
+def test_build_spec_defaults_no_base_url(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     spec = Pi(_ANTHROPIC_CFG).build_spec("hello", timeout=60)
 
-    assert spec.image == "tea-pi:1.0.0"
-    assert spec.user == "node"
     assert spec.timeout == 60
-    assert spec.extra_hosts == {}
+    assert spec.requirements.host_network_access is False
     assert spec.setup_command is None
-    assert "FROM node:22" in spec.dockerfile
-    assert "@earendil-works/pi-coding-agent@1.0.0" in spec.dockerfile
     assert "--model anthropic/claude-sonnet-4-6" in spec.command
     # These flags are load-bearing: without --print pi opens a TUI and exits
     # silently; without --mode json parse() finds no events and returns empty
@@ -127,15 +136,13 @@ def test_build_spec_defaults_no_base_url(monkeypatch):
     assert "--print" in spec.command
     assert "--mode json" in spec.command
     assert "--no-extensions" in spec.command
-    assert spec.env["PI_OFFLINE"] == "1"
-    resolve_cli_version.cache_clear()
 
 
 def test_build_spec_model_injection_is_quoted(monkeypatch):
     """A hostile model string must not break out of the pi command line."""
     monkeypatch.setenv("PI_VERSION", "1.0.0")
     resolve_cli_version.cache_clear()
-    cfg = ModelConfig("ollama/qwen; touch /tmp/PWNED")
+    cfg = PiConfig("ollama/qwen; touch /tmp/PWNED")
     spec = Pi(cfg).build_spec("hello", timeout=60)
     assert "--model 'ollama/qwen; touch /tmp/PWNED'" in spec.command
     sanitised = spec.command.replace("'ollama/qwen; touch /tmp/PWNED'", "SAFE")
@@ -157,7 +164,7 @@ def test_build_spec_no_api_key_env_when_unset(monkeypatch):
 
 def test_build_spec_api_key_env_set_but_missing_from_environ(monkeypatch):
     monkeypatch.delenv("MISSING_KEY", raising=False)
-    spec = Pi(ModelConfig("foo/bar", api_key_env="MISSING_KEY")).build_spec(
+    spec = Pi(PiConfig("foo/bar", api_key_env="MISSING_KEY")).build_spec(
         "hi", timeout=30
     )
     assert "MISSING_KEY" not in spec.env
@@ -165,25 +172,25 @@ def test_build_spec_api_key_env_set_but_missing_from_environ(monkeypatch):
 
 def test_build_spec_with_base_url_writes_models_json(monkeypatch):
     monkeypatch.setenv("PROVIDER_KEY", "sk-cloud-xyz")
-    cfg = ModelConfig(
+    cfg = PiConfig(
         "ollama/qwen2.5-coder:1.5b",
         api_key_env="PROVIDER_KEY",
         base_url="https://ollama.example/v1",
     )
     spec = Pi(cfg).build_spec("hi", timeout=30)
 
-    assert spec.extra_hosts == {"host.docker.internal": "host-gateway"}
+    # The agent declares the need for host access; the executor decides how.
+    assert spec.requirements.host_network_access is True
     assert "mkdir -p /home/node/.pi/agent" in spec.setup_command
     assert "models.json" in spec.setup_command
     # the resolved key from the host env should be baked into the models.json
     # written to the container — find it inside the printf payload.
     assert '"apiKey": "sk-cloud-xyz"' in spec.setup_command
     assert '"baseUrl": "https://ollama.example/v1"' in spec.setup_command
-    assert "models.json" in spec.setup_command
 
 
 def test_build_spec_with_base_url_but_no_api_key_env_uses_local(monkeypatch):
-    cfg = ModelConfig(
+    cfg = PiConfig(
         "ollama/qwen2.5-coder:1.5b", base_url="http://host.docker.internal:11434/v1"
     )
     spec = Pi(cfg).build_spec("hi", timeout=30)
@@ -224,7 +231,7 @@ def test_build_models_json_defaults_to_local_when_no_key():
 
 
 def test_pi_harness_with_model_threads_config_through():
-    new = PiHarness().with_model(ModelConfig("ollama/x", base_url="http://h/v1"))
+    new = PiHarness().with_model(PiConfig("ollama/x", base_url="http://h/v1"))
     inner = new._agent  # type: ignore[attr-defined]
     assert isinstance(inner, Pi)
     assert inner._model_config.model == "ollama/x"
@@ -317,8 +324,8 @@ def test_pi_parse_error_does_not_override_real_nonzero_exit():
 # ── Pi.install_skills ─────────────────────────────────────────────────────────
 
 
-def _empty_spec() -> DockerSpec:
-    return DockerSpec(command="noop", image="x")
+def _empty_spec() -> ExecutionSpec:
+    return ExecutionSpec(command="noop")
 
 
 def test_install_skills_copies_into_pi_native_path():
@@ -333,9 +340,9 @@ def test_install_skills_copies_into_pi_native_path():
     assert prompt == "Do the task"  # Pi doesn't touch the prompt
     assert spec.setup_command is not None
     assert "mkdir -p /home/node/.pi/agent/skills" in spec.setup_command
-    assert (
-        "cp -R /workspace/skills/add-operation /home/node/.pi/agent/skills/"
-    ) in spec.setup_command
+    assert "cp -R /workspace/skills/add-operation /home/node/.pi/agent/skills/" in (
+        spec.setup_command
+    )
 
 
 def test_install_skills_reflects_per_skill_source():
@@ -349,8 +356,9 @@ def test_install_skills_reflects_per_skill_source():
     )
     # Pin the exact name-to-source pairing, not just substring presence — a
     # swapped mapping would otherwise still contain both source strings.
-    assert "cp -R /workspace/.pi/skills/alpha /home/node/.pi/agent/skills/" in (
-        spec.setup_command
+    assert (
+        "cp -R /workspace/.pi/skills/alpha /home/node/.pi/agent/skills/"
+        in spec.setup_command
     )
     assert "cp -R /workspace/.agents/skills/beta /home/node/.pi/agent/skills/" in (
         spec.setup_command
@@ -374,29 +382,31 @@ def test_install_skills_multiple_skills():
         ["skill-a", "skill-b"],
         {"skill-a": "skills", "skill-b": "skills"},
     )
-    assert "cp -R /workspace/skills/skill-a /home/node/.pi/agent/skills/" in (
-        spec.setup_command
+    assert (
+        "cp -R /workspace/skills/skill-a /home/node/.pi/agent/skills/"
+        in spec.setup_command
     )
-    assert "cp -R /workspace/skills/skill-b /home/node/.pi/agent/skills/" in (
-        spec.setup_command
+    assert (
+        "cp -R /workspace/skills/skill-b /home/node/.pi/agent/skills/"
+        in spec.setup_command
     )
 
 
 def test_install_skills_preserves_existing_setup():
-    """If build_spec set models.json setup, install_skills chains, not replaces."""
+    """If the spec already carries setup, install_skills chains, not replaces."""
     base = replace(_empty_spec(), setup_command="echo prelude")
     spec, _ = Pi(_ANTHROPIC_CFG).install_skills(
         base, "Task", "/tmp/x", ["s"], {"s": "skills"}
     )
     assert spec.setup_command.startswith("echo prelude && ")
-    assert "cp -R /workspace/skills/s /home/node/.pi/agent/skills/" in (
-        spec.setup_command
+    assert (
+        "cp -R /workspace/skills/s /home/node/.pi/agent/skills/" in spec.setup_command
     )
 
 
 def test_install_skills_chains_with_models_json_setup():
     """End-to-end: build_spec sets models.json, install_skills appends skill copies."""
-    cfg = ModelConfig("ollama/qwen", base_url="http://host.docker.internal:11434/v1")
+    cfg = PiConfig("ollama/qwen", base_url="http://host.docker.internal:11434/v1")
     base = Pi(cfg).build_spec("Task", timeout=60)
     assert "models.json" in base.setup_command  # precondition
 
