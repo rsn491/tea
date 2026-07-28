@@ -1,0 +1,43 @@
+name: pi-small-llm
+
+# Runs the Pi-agent example tests (examples/demo_calculator/agent-tests/*_pi.py)
+# against a tiny local model served by Ollama, so every PR gets a cheap,
+# key-free sanity check of the Pi harness without hitting a paid API.
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  pi-example-tests:
+    runs-on: ubuntu-latest
+
+    services:
+      ollama:
+        image: ollama/ollama:latest
+        ports:
+          - 11434:11434
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Pull small model into Ollama
+        run: |
+          curl -sS -X POST http://localhost:11434/api/pull \
+            -d '{"model": "qwen2.5-coder:1.5b", "stream": false}'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install tea
+        run: uv sync
+
+      - name: Run Pi example tests against the local model
+        env:
+          MODEL_PROVIDER_MODEL: ollama/qwen2.5-coder:1.5b
+          MODEL_PROVIDER_BASE_URL: http://host.docker.internal:11434
+          MODEL_PROVIDER_KEY: local
+        run: uv run tea examples/demo_calculator/agent-tests/test_add_new_operation_pi.py
