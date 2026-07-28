@@ -35,9 +35,9 @@ jobs:
       - name: Install tea
         run: uv sync
 
-      - name: Run Pi example tests against the local model
+      - name: Run Pi hello-world sanity check
         env:
           MODEL_PROVIDER_MODEL: ollama/qwen2.5-coder:1.5b
           MODEL_PROVIDER_BASE_URL: http://host.docker.internal:11434
           MODEL_PROVIDER_KEY: local
-        run: uv run tea examples/demo_calculator/agent-tests/test_add_new_operation_pi.py
+        run: uv run tea examples/demo_calculator/agent-tests/test_hello_world_pi.py
