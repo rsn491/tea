@@ -3,7 +3,7 @@ asking the model to edit any code — safe to run against a tiny local model
 in CI. Requires the same three MODEL_PROVIDER_* env vars as
 test_add_new_operation_pi.py (set them in a local .env to run manually):
 
-    MODEL_PROVIDER_MODEL    e.g. ollama/smollm2:135m
+    MODEL_PROVIDER_MODEL    e.g. ollama/qwen2.5-coder:0.5b
     MODEL_PROVIDER_BASE_URL e.g. http://host.docker.internal:11434
     MODEL_PROVIDER_KEY      provider api key (or "local" for unauthenticated)
 """
