@@ -14,9 +14,10 @@ from tea.agent.agent_run import AgentRun
 from tea.baseline import Baseline, TestSummary
 from tea.collect_result import _CollectResult
 from tea.infra.docker import Docker
-from tea.tui import _bold_cyan, _cyan, _dim, _Spinner
+from tea.tui import _Spinner
 from tea.tui.baseline_view import BaselineComparisonView
 from tea.tui.runner_view import print_test_header, print_test_results
+from tea.tui.theme import bold_primary, dim, primary
 
 
 @dataclass
@@ -230,7 +231,7 @@ class TestRunner:
         last_file: Path | None = None
         for tc in test_cases:
             if tc.path != last_file:
-                print(f"  {_cyan('──')} {_dim(str(tc.path))}")
+                print(f"  {primary('──')} {dim(str(tc.path))}")
                 last_file = tc.path
             n = getattr(tc.fn, "_tea_iterations", self._iterations)
             max_failures = getattr(tc.fn, "_tea_max_failures", 0)
@@ -243,7 +244,7 @@ class TestRunner:
     def _run_parallel(self, test_cases: list[TestCase]) -> bool:
         total = len(test_cases)
         workers = self._workers
-        print(f"  {_cyan('──')} running {total} test(s) with {workers} worker(s)\n")
+        print(f"  {primary('──')} running {total} test(s) with {workers} worker(s)\n")
 
         completed = 0
         running: set[str] = set()
@@ -287,12 +288,12 @@ class TestRunner:
 
                     with spinner.paused():
                         if tc.path != last_file:
-                            print(f"  {_cyan('──')} {_dim(str(tc.path))}")
+                            print(f"  {primary('──')} {dim(str(tc.path))}")
                             last_file = tc.path
                         exc = fut.exception()
                         if exc:
                             ok = False
-                            print(f"\n  {_bold_cyan(name)}\n  error: {exc}\n")
+                            print(f"\n  {bold_primary(name)}\n  error: {exc}\n")
                         else:
                             result = fut.result()
                             self._report(name, result, test_id=tc.id)
