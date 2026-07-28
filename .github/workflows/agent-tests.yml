@@ -1,4 +1,4 @@
-name: pi-small-llm
+name: agent-tests
 
 # Runs the Pi-agent example tests (examples/demo_calculator/agent-tests/*_pi.py)
 # against a tiny local model served by Ollama, so every PR gets a cheap,
@@ -9,7 +9,7 @@ on:
     branches: [main]
 
 jobs:
-  pi-example-tests:
+  pi-sanity-check:
     runs-on: ubuntu-latest
 
     services:
