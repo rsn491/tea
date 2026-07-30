@@ -5,23 +5,52 @@ import os
 import re
 import shlex
 from dataclasses import replace
+from typing import Self
 
-from tea.executor import DockerSpec, RawResult
-from tea.executor.docker_executor import DockerExecutor
+from tea.executor import ExecutionSpec, RawResult
+from tea.executor.docker_executor import DockerExecutor, DockerProfile
 
 from ._utils import _sanitize_env_value
 from ._version import resolve_cli_version
 from .agent import Agent
 from .agent_run import AgentRun, Step, StepType, ToolCall
-from .harness import ApiKeyHarness, Harness
+from .harness import ApiKeyHarness
 
 _NODE_VERSION = "22"
 _CODEX_PACKAGE = "@openai/codex"
 _CODEX_VERSION_ENV = "CODEX_VERSION"
 _DEFAULT_MODEL = "gpt-5.2-codex"
+_NPM_PREFIX = "/home/node/.npm-global"
 
 # DockerExecutor mounts the workdir at this path; install_skills relies on it.
 _CONTAINER_WORKDIR = "/workspace"
+
+
+def _resolve_version() -> str:
+    return resolve_cli_version("codex --version", _CODEX_PACKAGE, _CODEX_VERSION_ENV)
+
+
+def _dockerfile(version: str) -> str:
+    return (
+        f"FROM node:{_NODE_VERSION}\n"
+        f"ENV NPM_CONFIG_PREFIX={_NPM_PREFIX}\n"
+        f"RUN npm install -g {_CODEX_PACKAGE}@{version} --quiet 2>/dev/null\n"
+    )
+
+
+def codex_docker_profile() -> DockerProfile:
+    """Static Docker knowledge for Codex, resolved lazily (see ClaudeCode).
+
+    Prefer ``CodexHarness.docker()`` over wiring this into a ``DockerExecutor``
+    by hand — see that method for why.
+    """
+    version = _resolve_version()
+    return DockerProfile(
+        image=f"tea-codex:{version}",
+        dockerfile=_dockerfile(version),
+        user="node",
+        env_overrides={"HOME": "/home/node", "NPM_CONFIG_PREFIX": _NPM_PREFIX},
+    )
 
 
 class Codex(Agent):
@@ -34,41 +63,38 @@ class Codex(Agent):
     def model(self) -> str:
         return self._model
 
-    def build_spec(self, prompt: str, timeout: int) -> DockerSpec:
-        npm_prefix = "/home/node/.npm-global"
-        env: dict[str, str] = {"HOME": "/home/node", "NPM_CONFIG_PREFIX": npm_prefix}
+    def copy(self, *, model: str | None = None) -> Self:
+        """Return a copy with the given fields overridden, keeping the rest."""
+        return type(self)(model=self._model if model is None else model)
+
+    def build_spec(self, prompt: str, timeout: int) -> ExecutionSpec:
+        env: dict[str, str] = {}
         # API-key auth: forward OPENAI_API_KEY (recommended for programmatic use).
         if api_key := os.environ.get("OPENAI_API_KEY"):
             env["OPENAI_API_KEY"] = api_key
 
-        version = self.version()
-        image = f"tea-codex:{version}"
-
         env["CODEX_PROMPT"] = _sanitize_env_value(prompt)
 
-        return DockerSpec(
+        return ExecutionSpec(
             command=(
-                f"{npm_prefix}/bin/codex exec --json"
+                f"{_NPM_PREFIX}/bin/codex exec --json"
                 f" --dangerously-bypass-approvals-and-sandbox"
                 f" --skip-git-repo-check --ephemeral"
                 f" -m {shlex.quote(self._model)}"
                 ' "$CODEX_PROMPT"'
             ),
-            dockerfile=self._dockerfile(version),
             env=env,
-            image=image,
-            user="node",
             timeout=timeout,
         )
 
     def install_skills(
         self,
-        spec: DockerSpec,
+        spec: ExecutionSpec,
         prompt: str,
         workdir: str,
         skills: list[str],
         source_for: dict[str, str],
-    ) -> tuple[DockerSpec, str]:
+    ) -> tuple[ExecutionSpec, str]:
         """Copy project skills from the mounted workdir into Codex's native path.
 
         Codex loads skills from ``~/.codex/skills/<name>/SKILL.md``. The workdir
@@ -82,17 +108,8 @@ class Codex(Agent):
         )
         return replace(spec, setup_command=merged_setup), prompt
 
-    def _dockerfile(self, version: str) -> str:
-        return (
-            f"FROM node:{_NODE_VERSION}\n"
-            "ENV NPM_CONFIG_PREFIX=/home/node/.npm-global\n"
-            f"RUN npm install -g {_CODEX_PACKAGE}@{version} --quiet 2>/dev/null\n"
-        )
-
     def version(self) -> str:
-        return resolve_cli_version(
-            "codex --version", _CODEX_PACKAGE, _CODEX_VERSION_ENV
-        )
+        return _resolve_version()
 
     def parse(self, raw: RawResult) -> AgentRun:
         run = _parse(raw.stdout)
@@ -103,14 +120,36 @@ class Codex(Agent):
 
 
 class CodexHarness(ApiKeyHarness):
-    def with_api_key(self) -> Harness:
-        agent = self._agent
-        model = agent.model if isinstance(agent, Codex) else _DEFAULT_MODEL
-        return Harness(
-            Codex(model=model),
-            DockerExecutor(),
+    @classmethod
+    def docker(
+        cls, agent: Codex | None = None, *, skills_sources: list[str] | None = None
+    ) -> Self:
+        """Pair a ``Codex`` agent with the Docker image built for it.
+
+        The single place agent and image are wired together — see
+        ``ClaudeCodeHarness.docker``.
+        """
+        return cls(
+            agent if agent is not None else Codex(),
+            DockerExecutor(codex_docker_profile),
+            skills_sources=skills_sources,
+        )
+
+    def with_model(self, model: str) -> Self:
+        return type(self).docker(
+            self._codex_agent().copy(model=model),
             skills_sources=self.skills_sources,
         )
+
+    def with_api_key(self) -> Self:
+        return type(self).docker(
+            self._codex_agent().copy(),
+            skills_sources=self.skills_sources,
+        )
+
+    def _codex_agent(self) -> Codex:
+        agent = self._agent
+        return agent if isinstance(agent, Codex) else Codex()
 
 
 def _skill_setup(skills: list[str], source_for: dict[str, str]) -> str:

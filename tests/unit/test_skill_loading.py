@@ -12,18 +12,14 @@ from tea.agent.agent_run import AgentRun
 from tea.agent.claude_code import ClaudeCode, ClaudeCodeHarness
 from tea.agent.codex import Codex
 from tea.agent.harness import Harness
-from tea.agent.model_config import ModelConfig
-from tea.agent.pi import Pi
+from tea.agent.pi import Pi, PiConfig
 from tea.agent.run_builder import RunBuilder, _discover_skills, _resolve_skill_sources
-from tea.executor import DockerSpec, ExecutionSpec, Executor, RawResult
-from tea.executor.docker_executor import DockerExecutor
+from tea.executor import ExecutionSpec, Executor, RawResult
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 
-_PI_TEST_CFG = ModelConfig(
-    "anthropic/claude-sonnet-4-6", api_key_env="ANTHROPIC_API_KEY"
-)
+_PI_TEST_CFG = PiConfig("anthropic/claude-sonnet-4-6", api_key_env="ANTHROPIC_API_KEY")
 
 
 def _make_skill(workdir: str, name: str, content: str, *, skills_dir: str) -> None:
@@ -31,13 +27,6 @@ def _make_skill(workdir: str, name: str, content: str, *, skills_dir: str) -> No
     os.makedirs(skill_dir, exist_ok=True)
     with open(os.path.join(skill_dir, "SKILL.md"), "w", encoding="utf-8") as fh:
         fh.write(content)
-
-
-@dataclass
-class _DummySpec(ExecutionSpec):
-    """ExecutionSpec subclass usable in tests (DockerSpec requires `image`)."""
-
-    pass
 
 
 @dataclass
@@ -62,7 +51,7 @@ class _PromptCapturingAgent(Agent):
 
     def build_spec(self, prompt: str, timeout: int) -> ExecutionSpec:
         self.received_prompt = prompt
-        return _DummySpec(command="noop", timeout=timeout)
+        return ExecutionSpec(command="noop", timeout=timeout)
 
     def parse(self, raw: RawResult) -> AgentRun:
         return AgentRun(raw=raw.stdout, steps=[], tools=[], skills=[])
@@ -209,7 +198,7 @@ def test_agent_install_skills_is_abstract():
 
     class _MissingInstall(Agent):
         def build_spec(self, prompt, timeout):
-            return _DummySpec(command="noop", timeout=timeout)
+            return ExecutionSpec(command="noop", timeout=timeout)
 
         def parse(self, raw):
             return AgentRun(raw="", steps=[], tools=[], skills=[])
@@ -330,7 +319,8 @@ def test_claude_code_harness_with_skills_runs_install_skills(monkeypatch):
             source_for={"regression": "skills"},
         )
     spec = executor.spec
-    assert isinstance(spec, DockerSpec)
+    # Guards the None case; every spec is an ExecutionSpec by construction.
+    assert spec is not None
     assert spec.setup_command is not None
     # Skills get materialised into Claude Code's native cwd location.
     assert "/workspace/.claude/skills/regression" in spec.setup_command
@@ -352,7 +342,8 @@ def test_codex_harness_with_skills_runs_install_skills(monkeypatch):
         )
 
     spec = executor.spec
-    assert isinstance(spec, DockerSpec)
+    # Guards the None case; every spec is an ExecutionSpec by construction.
+    assert spec is not None
     assert spec.setup_command is not None
     assert "/home/node/.codex/skills/skill-x" in spec.setup_command
 
@@ -490,14 +481,13 @@ def test_claude_code_max_turns_property():
 # ── ClaudeCode extra_volumes constructor param ────────────────────────────────
 
 
-def test_claude_code_extra_volumes_merged_into_spec(monkeypatch, tmp_path):
+def test_claude_code_extra_volumes_become_extra_mounts(monkeypatch, tmp_path):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("CLAUDE_CODE_OAUTH_TOKEN", raising=False)
     monkeypatch.setattr(os.path, "isfile", lambda p: False)
     extra = {str(tmp_path): "/container/extra"}
     spec = ClaudeCode(extra_volumes=extra).build_spec("task", 60)
-    assert str(tmp_path) in spec.extra_volumes
-    assert spec.extra_volumes[str(tmp_path)] == "/container/extra"
+    assert spec.requirements.extra_mounts[str(tmp_path)] == "/container/extra"
 
 
 def test_claude_code_extra_volumes_defaults_empty(monkeypatch):
@@ -505,7 +495,7 @@ def test_claude_code_extra_volumes_defaults_empty(monkeypatch):
     monkeypatch.delenv("CLAUDE_CODE_OAUTH_TOKEN", raising=False)
     monkeypatch.setattr(os.path, "isfile", lambda p: False)
     spec = ClaudeCode().build_spec("task", 60)
-    assert spec.extra_volumes == {}
+    assert spec.requirements.extra_mounts == {}
 
 
 # ── ClaudeCodeHarness uses public properties ─────────────────────────────────
@@ -513,7 +503,7 @@ def test_claude_code_extra_volumes_defaults_empty(monkeypatch):
 
 def test_claude_code_harness_with_api_key_threads_model_and_turns():
     agent = ClaudeCode(model="claude-sonnet-4-6", max_turns=3)
-    harness = ClaudeCodeHarness(agent, DockerExecutor()).with_api_key()
+    harness = ClaudeCodeHarness.docker(agent).with_api_key()
     inner = harness._agent
     assert isinstance(inner, ClaudeCode)
     assert inner.model == "claude-sonnet-4-6"
@@ -521,9 +511,7 @@ def test_claude_code_harness_with_api_key_threads_model_and_turns():
 
 
 def test_claude_code_harness_with_api_key_threads_skills_sources():
-    harness = ClaudeCodeHarness(
-        ClaudeCode(), DockerExecutor(), skills_sources=["eval/skills"]
-    ).with_api_key()
+    harness = ClaudeCodeHarness.docker(skills_sources=["eval/skills"]).with_api_key()
     assert harness.skills_sources == ["eval/skills"]
 
 
@@ -569,8 +557,8 @@ def test_pi_install_skills_copies_into_native_path():
     See https://pi.dev/docs/latest/skills — directories containing SKILL.md
     under ~/.pi/agent/skills/ are scanned recursively at startup.
     """
-    cfg = ModelConfig("anthropic/claude-sonnet-4-6", api_key_env="ANTHROPIC_API_KEY")
-    base_spec = DockerSpec(command="noop", image="x")
+    cfg = PiConfig("anthropic/claude-sonnet-4-6", api_key_env="ANTHROPIC_API_KEY")
+    base_spec = ExecutionSpec(command="noop")
     spec, prompt = Pi(cfg).install_skills(
         base_spec,
         "Do the task",
@@ -694,7 +682,7 @@ def test_run_builder_symlinked_skill_lands_as_real_file(tmp_path):
 
 
 def test_pi_harness_with_skills_runs_install_skills(tmp_path):
-    cfg = ModelConfig("anthropic/claude-sonnet-4-6", api_key_env="ANTHROPIC_API_KEY")
+    cfg = PiConfig("anthropic/claude-sonnet-4-6", api_key_env="ANTHROPIC_API_KEY")
     executor = _RecordingExecutor()
     harness = Harness(Pi(cfg), executor)
     _make_skill(str(tmp_path), "regression", "# any", skills_dir="skills")
@@ -706,7 +694,8 @@ def test_pi_harness_with_skills_runs_install_skills(tmp_path):
         source_for={"regression": "skills"},
     )
     spec = executor.spec
-    assert isinstance(spec, DockerSpec)
+    # Guards the None case; every spec is an ExecutionSpec by construction.
+    assert spec is not None
     assert spec.setup_command is not None
     assert "cp -R /workspace/skills/regression /home/node/.pi/agent/skills/" in (
         spec.setup_command
@@ -714,8 +703,8 @@ def test_pi_harness_with_skills_runs_install_skills(tmp_path):
 
 
 def test_pi_skill_name_injection_is_quoted():
-    cfg = ModelConfig("anthropic/claude-sonnet-4-6", api_key_env="ANTHROPIC_API_KEY")
-    base = DockerSpec(command="noop", image="x")
+    cfg = PiConfig("anthropic/claude-sonnet-4-6", api_key_env="ANTHROPIC_API_KEY")
+    base = ExecutionSpec(command="noop")
     spec, _ = Pi(cfg).install_skills(
         base, "task", "/tmp/x", ["skill; echo hacked"], {"skill; echo hacked": "skills"}
     )
@@ -740,6 +729,6 @@ def test_install_skills_rejects_path_traversal(agent_factory, bad_name, monkeypa
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     agent = agent_factory()
-    base = DockerSpec(command="noop", image="x")
+    base = ExecutionSpec(command="noop")
     with pytest.raises(ValueError, match="Invalid skill name"):
         agent.install_skills(base, "task", "/tmp/x", [bad_name], {bad_name: "skills"})
