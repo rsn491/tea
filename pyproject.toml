@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "tea"
 version = "0.1.0"
-description = "Testing tool for agentic CLI tools (Claude Code, Codex) in Docker"
+description = "Testing tool for agentic CLI tools (Claude Code, Pi) in Docker"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { file = "LICENSE" }

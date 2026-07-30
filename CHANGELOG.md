@@ -5,13 +5,12 @@
 ### Harness-specific model configs
 
 `ModelConfig` was a three-field struct whose fields meant different things per
-harness — Claude Code and Codex silently ignored `api_key_env` and `base_url`.
+harness — Claude Code silently ignored `api_key_env` and `base_url`.
 Configs are now harness-specific.
 
 ```python
-# Claude Code and Codex take a plain model string
+# Claude Code takes a plain model string
 Agents.ClaudeCode.with_model("claude-opus-4-7").prompt("task").run()
-Agents.Codex.with_model("gpt-5.3-codex").prompt("task").run()
 
 # Pi takes a PiConfig, where api_key_env / base_url actually mean something
 Agents.Pi.with_model(PiConfig("anthropic/claude-sonnet-4-6", api_key_env="ANTHROPIC_API_KEY")).prompt("task").run()
@@ -28,7 +27,7 @@ Docker knowledge (image, dockerfile, user, base env) moved into a
 callable so the CLI version probe stays lazy.
 
 Agent and image are wired together in exactly one place per agent —
-`ClaudeCodeHarness.docker()` / `CodexHarness.docker()` / `PiHarness.with_model()`.
+`ClaudeCodeHarness.docker()` / `PiHarness.with_model()`.
 Prefer those over constructing `Harness(agent, DockerExecutor(profile))` by
 hand, which type-checks even when the agent and image do not match.
 
@@ -36,10 +35,10 @@ hand, which type-checks even when the agent and image do not match.
 
 | Symbol | Change |
 |--------|--------|
-| `ModelConfig` | **Removed** — use `PiConfig` (Pi) or `with_model(str)` (Claude Code, Codex) |
+| `ModelConfig` | **Removed** — use `PiConfig` (Pi) or `with_model(str)` (Claude Code) |
 | `PiConfig` | **Added** — `PiConfig(model, api_key_env=None, base_url=None)`, exported from `tea` and `tea.agent` |
-| `ClaudeCodeHarness.with_model` / `CodexHarness.with_model` | **Added** — take a model string; return the concrete harness type, so they compose with `with_api_key()` |
-| `ClaudeCodeHarness.docker` / `CodexHarness.docker` | **Added** — pair an agent with the Docker image built for it |
+| `ClaudeCodeHarness.with_model` | **Added** — takes a model string; returns the concrete harness type, so it composes with `with_api_key()` |
+| `ClaudeCodeHarness.docker` | **Added** — pairs an agent with the Docker image built for it |
 | `DockerSpec` | **Removed** |
 | `ExecutionRequirements` | **Added** — `ExecutionRequirements(host_network_access=False, extra_mounts={})` |
 | `ExecutionSpec` | **Gains** `setup_command` and `requirements` |

@@ -124,23 +124,6 @@ To pick a model, pass its identifier to `with_model()`; the default is
 Agents.ClaudeCode.with_model("claude-opus-4-7").prompt("...").run()
 ```
 
-### Codex
-
-```python
-Agents.Codex
-    .prompt("Add 'minus' operation support to the calculator")
-    .workdir("examples/demo_calculator")
-    .run()
-```
-
-Setup `OPENAI_API_KEY` (API-key auth) and construct the harness with
-`Agents.Codex.with_api_key()`. The default model is `gpt-5.2-codex`; pick
-another with `with_model()`:
-
-```python
-Agents.Codex.with_model("gpt-5.3-codex").prompt("...").run()
-```
-
 ### Pi
 
 Pi requires a `PiConfig`:
@@ -178,7 +161,6 @@ and copies them into the agent's native skill directory in the container.
 | Agent | Default sources (searched in order) |
 |---|---|
 | ClaudeCode | `.claude/skills`, `.agents/skills` |
-| Codex | `.codex/skills`, `.agents/skills` |
 | Pi | `.pi/skills`, `.agents/skills` |
 
 `.agents/skills` is the cross-agent convention — put a skill there and every

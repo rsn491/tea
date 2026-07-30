@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import tempfile
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from typing import Any
 
 import pytest
@@ -10,7 +10,6 @@ import pytest
 from tea.agent.agent import Agent
 from tea.agent.agent_run import AgentRun
 from tea.agent.claude_code import ClaudeCode, ClaudeCodeHarness
-from tea.agent.codex import Codex
 from tea.agent.harness import Harness
 from tea.agent.pi import Pi, PiConfig
 from tea.agent.run_builder import RunBuilder, _discover_skills, _resolve_skill_sources
@@ -292,15 +291,11 @@ def test_claude_code_default_sources():
     assert ClaudeCode.DEFAULT_SKILL_SOURCES == (".claude/skills", ".agents/skills")
 
 
-def test_codex_default_sources():
-    assert Codex.DEFAULT_SKILL_SOURCES == (".codex/skills", ".agents/skills")
-
-
 def test_pi_default_sources():
     assert Pi.DEFAULT_SKILL_SOURCES == (".pi/skills", ".agents/skills")
 
 
-# ── Regression: ClaudeCode/Codex must not crash with skills + workdir ────────
+# ── Regression: ClaudeCode must not crash with skills + workdir ──────────────
 
 
 def test_claude_code_harness_with_skills_runs_install_skills(monkeypatch):
@@ -325,87 +320,6 @@ def test_claude_code_harness_with_skills_runs_install_skills(monkeypatch):
     # Skills get materialised into Claude Code's native cwd location.
     assert "/workspace/.claude/skills/regression" in spec.setup_command
     assert "/workspace/skills/regression/SKILL.md" in spec.setup_command
-
-
-def test_codex_harness_with_skills_runs_install_skills(monkeypatch):
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    executor = _RecordingExecutor()
-    harness = Harness(Codex(), executor)
-    with tempfile.TemporaryDirectory() as workdir:
-        _make_skill(workdir, "skill-x", "# any", skills_dir="skills")
-        harness._execute(
-            "hi",
-            timeout=30,
-            workdir=workdir,
-            skills=["skill-x"],
-            source_for={"skill-x": "skills"},
-        )
-
-    spec = executor.spec
-    # Guards the None case; every spec is an ExecutionSpec by construction.
-    assert spec is not None
-    assert spec.setup_command is not None
-    assert "/home/node/.codex/skills/skill-x" in spec.setup_command
-
-
-# ── Codex.install_skills ──────────────────────────────────────────────────────
-
-
-def test_codex_install_skills_adds_mkdir_and_cp(monkeypatch):
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    base = Codex().build_spec("do stuff", 60)
-    assert base.setup_command is None  # no skill commands in base spec
-
-    spec, prompt = Codex().install_skills(
-        base,
-        "do stuff",
-        "/tmp/anywhere",
-        ["add-new-operation"],
-        {"add-new-operation": "skills"},
-    )
-
-    assert prompt == "do stuff"  # codex doesn't touch the prompt
-    assert spec.setup_command is not None
-    assert "mkdir -p /home/node/.codex/skills/add-new-operation" in spec.setup_command
-    assert (
-        "cp /workspace/skills/add-new-operation/SKILL.md"
-        " /home/node/.codex/skills/add-new-operation/SKILL.md"
-    ) in spec.setup_command
-
-
-def test_codex_install_skills_uses_per_skill_source_path(monkeypatch):
-    """Codex copies each skill from its own discovered source."""
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    base = Codex().build_spec("do stuff", 60)
-    spec, _ = Codex().install_skills(
-        base,
-        "do stuff",
-        "/tmp/x",
-        ["a", "b"],
-        {"a": ".codex/skills", "b": ".agents/skills"},
-    )
-    assert "cp /workspace/.codex/skills/a/SKILL.md" in spec.setup_command
-    assert "cp /workspace/.agents/skills/b/SKILL.md" in spec.setup_command
-
-
-def test_codex_install_skills_multiple_skills(monkeypatch):
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    base = Codex().build_spec("do stuff", 60)
-    spec, _ = Codex().install_skills(
-        base, "do stuff", "/tmp/x", ["a", "b"], {"a": "skills", "b": "skills"}
-    )
-    assert "cp /workspace/skills/a/SKILL.md" in spec.setup_command
-    assert "cp /workspace/skills/b/SKILL.md" in spec.setup_command
-
-
-def test_codex_install_skills_preserves_existing_setup(monkeypatch):
-    """If build_spec ever grows other setup, install_skills chains, not replaces."""
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    base = replace(Codex().build_spec("hi", 60), setup_command="echo prelude")
-    spec, _ = Codex().install_skills(base, "hi", "/tmp/x", ["s"], {"s": "skills"})
-
-    assert spec.setup_command.startswith("echo prelude && ")
-    assert "/home/node/.codex/skills/s" in spec.setup_command
 
 
 # ── ClaudeCode.install_skills ────────────────────────────────────────────────
@@ -524,28 +438,6 @@ def test_claude_model_injection_is_quoted(monkeypatch):
     spec = ClaudeCode(model="haiku; rm -rf /").build_spec("task", 60)
     assert "--model 'haiku; rm -rf /'" in spec.command
     assert "; rm -rf /" not in spec.command.split("'haiku; rm -rf /'")[1]
-
-
-def test_codex_model_injection_is_quoted(monkeypatch):
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    spec = Codex(model="gpt`whoami`").build_spec("task", 60)
-    assert "-m 'gpt`whoami`'" in spec.command
-
-
-def test_codex_skill_name_injection_is_quoted(monkeypatch):
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    base = Codex().build_spec("task", 60)
-    spec, _ = Codex().install_skills(
-        base,
-        "task",
-        "/tmp/x",
-        ["skill; echo hacked"],
-        {"skill; echo hacked": "skills"},
-    )
-    assert spec.setup_command is not None
-    assert "'skill; echo hacked'" in spec.setup_command
-    sanitised = spec.setup_command.replace("'skill; echo hacked'", "SAFE")
-    assert "echo hacked" not in sanitised
 
 
 # ── Pi.install_skills: copies into Pi's native discovery path ────────────────
@@ -714,21 +606,19 @@ def test_pi_skill_name_injection_is_quoted():
     assert "echo hacked" not in sanitised
 
 
-# ── path-traversal hardening on both Codex and Pi _skill_setup helpers ────────
+# ── path-traversal hardening on Pi's _skill_setup helper ─────────────────────
 
 
-@pytest.mark.parametrize("agent_factory", [Codex, lambda: Pi(_PI_TEST_CFG)])
 @pytest.mark.parametrize("bad_name", ["../evil", "a/b", "..", ".", "a\\b"])
-def test_install_skills_rejects_path_traversal(agent_factory, bad_name, monkeypatch):
-    """A skill name containing path separators must be rejected by both agents.
+def test_install_skills_rejects_path_traversal(bad_name, monkeypatch):
+    """A skill name containing path separators must be rejected.
 
     shlex.quote protects the shell word but not the path semantics — a name
     like "../evil" would still escape the destination directory once the
     shell strips the quotes.
     """
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    agent = agent_factory()
+    agent = Pi(_PI_TEST_CFG)
     base = ExecutionSpec(command="noop")
     with pytest.raises(ValueError, match="Invalid skill name"):
         agent.install_skills(base, "task", "/tmp/x", [bad_name], {bad_name: "skills"})
