@@ -12,7 +12,7 @@ from tea.tui.theme import set_mode
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="tea",
-        description="Run agentic CLI tests against Claude Code or Codex in Docker.",
+        description="Run agentic CLI tests against Claude Code or Pi in Docker.",
         add_help=True,
     )
     parser.add_argument("target", nargs="?", help="folder, file, or file::test_fn")

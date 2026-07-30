@@ -7,7 +7,6 @@ import pytest
 import tea.executor
 from tea.agent import Agents
 from tea.agent.claude_code import ClaudeCode, ClaudeCodeHarness, claude_docker_profile
-from tea.agent.codex import Codex, CodexHarness, codex_docker_profile
 from tea.agent.harness import Harness
 from tea.agent.pi import Pi, PiConfig, PiHarness
 from tea.executor import ExecutionRequirements, ExecutionSpec
@@ -127,23 +126,6 @@ def test_claude_code_agent_version_uses_env_var(monkeypatch):
     """ClaudeCode.version() delegates to resolve_cli_version."""
     monkeypatch.setenv("CLAUDE_CODE_VERSION", "9.8.7")
     assert ClaudeCode().version() == "9.8.7"
-
-
-def test_codex_docker_profile_pins_versioned_image(monkeypatch):
-    monkeypatch.setenv("CODEX_VERSION", "4.5.6")
-    profile = codex_docker_profile()
-
-    assert profile.image == "tea-codex:4.5.6"
-    assert profile.user == "node"
-    assert "FROM node:22" in profile.dockerfile
-    assert "@openai/codex@4.5.6" in profile.dockerfile
-    assert profile.env_overrides["HOME"] == "/home/node"
-
-
-def test_codex_agent_version_uses_env_var(monkeypatch):
-    """Codex.version() delegates to resolve_cli_version."""
-    monkeypatch.setenv("CODEX_VERSION", "9.8.7")
-    assert Codex().version() == "9.8.7"
 
 
 # ── host_network_access ───────────────────────────────────────────────────────
@@ -291,42 +273,19 @@ def test_claude_code_factories_compose():
     assert harness._agent.max_turns == 7
 
 
-# ── Codex with_model ──────────────────────────────────────────────────────────
-
-
-def test_codex_harness_with_model_sets_model():
-    harness = Agents.Codex.with_model("gpt-5.3-codex")
-    assert isinstance(harness, Harness)
-    assert isinstance(harness._agent, Codex)
-    assert harness._agent.model == "gpt-5.3-codex"
-
-
-def test_codex_harness_with_model_preserves_skills_sources():
-    base = CodexHarness.docker(skills_sources=["eval/skills"])
-    harness = base.with_model("gpt-5.3-codex")
-    assert harness.skills_sources == ["eval/skills"]
-
-
-def test_codex_factories_compose():
-    harness = CodexHarness.docker().with_model("gpt-5.3-codex").with_api_key()
-    assert isinstance(harness, CodexHarness)
-    assert isinstance(harness._agent, Codex)
-    assert harness._agent.model == "gpt-5.3-codex"
-
-
 # ── Agent ↔ image pairing ─────────────────────────────────────────────────────
 
 
 def test_docker_factories_pair_each_agent_with_its_own_image(monkeypatch):
     """``.docker()`` is the single wiring point; each one picks its own image."""
     monkeypatch.setenv("CLAUDE_CODE_VERSION", "1.2.3")
-    monkeypatch.setenv("CODEX_VERSION", "4.5.6")
+    monkeypatch.setenv("PI_VERSION", "4.5.6")
 
     claude = ClaudeCodeHarness.docker()._executor._profile()
-    codex = CodexHarness.docker()._executor._profile()
+    pi = PiHarness().with_model(PiConfig("ollama/x"))._executor._profile()
 
     assert claude.image == "tea-claude-code:1.2.3"
-    assert codex.image == "tea-codex:4.5.6"
+    assert pi.image == "tea-pi:4.5.6"
 
 
 # ── tea.executor stays Docker-free ────────────────────────────────────────────

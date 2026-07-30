@@ -68,7 +68,7 @@ returns a `RawResult`; `Agent.parse()` turns that into an `AgentRun`.
 
 An agent only runs correctly inside the image built for it, and nothing in the
 type system enforces that pairing — so it lives in exactly one place per agent:
-`ClaudeCodeHarness.docker()`, `CodexHarness.docker()`, `PiHarness.with_model()`.
+`ClaudeCodeHarness.docker()`, `PiHarness.with_model()`.
 Build harnesses through those, not by calling `Harness(agent, DockerExecutor(...))`
 directly. `tea.executor` holds the executor-agnostic types only; `DockerProfile`
 and `DockerExecutor` come from `tea.executor.docker_executor`.
@@ -102,9 +102,7 @@ Callers (`Harness`, the judge checkers) depend only on the ABCs, never on concre
 |---|---|
 | `ANTHROPIC_API_KEY` | API key for the ClaudeCode agent running inside Docker (recommended) |
 | `CLAUDE_CODE_OAUTH_TOKEN` | Long-term token (`claude setup-token`) for the ClaudeCode agent; supported alternative to `ANTHROPIC_API_KEY` |
-| `OPENAI_API_KEY` | API key for the Codex agent running inside Docker |
 | `CLAUDE_CODE_VERSION` | Pin the `@anthropic-ai/claude-code` version used inside Docker (auto-detected from `claude --version` / npm if unset) |
-| `CODEX_VERSION` | Pin the `@openai/codex` version used inside Docker (auto-detected from `codex --version` / npm if unset) |
 | `PI_VERSION` | Pin the `pi` version used inside Docker (auto-detected from `pi --version` / npm if unset) |
 | `TEA_JUDGE_MODEL` | Judge model (default: `anthropic:claude-haiku-4-5-20251001`) |
 | `TEA_JUDGE_BASE_URL` | When set, routes judge calls through an OpenAI-compatible endpoint (OpenRouter, Ollama, vLLM, etc.) |
