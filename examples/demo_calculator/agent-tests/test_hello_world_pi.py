@@ -10,14 +10,14 @@ test_add_new_operation_pi.py (set them in a local .env to run manually):
 
 import os
 
-from tea import Agents, ModelConfig, check
+from tea import Agents, PiConfig, check
 
 _MODEL = os.environ["MODEL_PROVIDER_MODEL"]
 _BASE_URL = os.environ["MODEL_PROVIDER_BASE_URL"].rstrip("/") + "/v1"
 _API_KEY_ENV = "MODEL_PROVIDER_KEY"
 
 _pi = Agents.Pi.with_model(
-    ModelConfig(_MODEL, api_key_env=_API_KEY_ENV, base_url=_BASE_URL)
+    PiConfig(_MODEL, api_key_env=_API_KEY_ENV, base_url=_BASE_URL)
 )
 
 
