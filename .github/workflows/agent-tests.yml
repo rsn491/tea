@@ -5,6 +5,8 @@ name: agent-tests
 # key-free sanity check of the Pi harness without hitting a paid API.
 
 on:
+  push:
+    branches: [main]
   pull_request:
     branches: [main]
 
