@@ -17,9 +17,6 @@ Test and evaluation tool for agentic workflows. Run an agent against a task, ass
 pip install teaval
 ```
 
-The distribution is named `teaval` (the name `tea` was already taken on PyPI); the installed command
-is `tea`.
-
 To install from source instead:
 
 ```bash
