@@ -45,6 +45,7 @@ def test_add_minus_operation():
     )
 
     check_diff_added(run, "calculator.py", "def minus")
+    check_diff_added(run, "test_calculator.py", "def test_minus")
     check_file_changed(run, "README.md")
     check_skill_used(run, "add-new-operation")
     check_run_score(
