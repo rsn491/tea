@@ -3029,8 +3029,8 @@ wheels = [
 ]
 
 [[package]]
-name = "tea"
-version = "0.1.0"
+name = "teaval"
+version = "0.0.1"
 source = { editable = "." }
 dependencies = [
     { name = "docker" },

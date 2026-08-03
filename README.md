@@ -14,6 +14,12 @@ Test and evaluation tool for agentic workflows. Run an agent against a task, ass
 ### Install
 
 ```bash
+pip install teaval
+```
+
+To install from source instead:
+
+```bash
 pip install -e .
 ```
 
