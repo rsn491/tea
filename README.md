@@ -36,7 +36,7 @@ from tea import (
 )
 
 
-@iterations(2, max_failures=1)
+@iterations(3, max_failures=1)
 def test_add_minus_operation():
     run = (
         Agents.ClaudeCode.prompt("Add 'minus' operation support to the calculator")
@@ -45,7 +45,6 @@ def test_add_minus_operation():
     )
 
     check_diff_added(run, "calculator.py", "def minus")
-    check_diff_added(run, "test_calculator.py", "def test_minus")
     check_file_changed(run, "README.md")
     check_skill_used(run, "add-new-operation")
     check_run_score(
@@ -90,17 +89,22 @@ tea examples/demo_calculator/agent-tests -n 3 --baseline baseline.json
 
 ## Checkers
 
-- `check(label, condition)` — checks that `condition` is truthy and returns `bool`
-- `check_skill_used(run, skill)` — checks that the agent used `skill` and returns `bool`
-- `check_skill_not_used(run, skill)` — checks that the agent did not use `skill` and returns `bool`
-- `check_tool_used(run, tool)` — checks that the agent called `tool` and returns `bool`
-- `check_tool_not_used(run, tool)` — checks that the agent did not call `tool` and returns `bool`
-- `check_file_changed(run, file)` — checks that `file` was created or modified and returns `bool`
-- `check_file_not_changed(run, file)` — checks that `file` was left untouched and returns `bool`
-- `check_diff_added(run, file, code)` — checks that `code` appears in `file`'s added lines and returns `bool`
-- `check_diff_removed(run, file, code)` — checks that `code` appears in `file`'s removed lines and returns `bool`
-- `check_output_score(output_to_evaluate, judge_prompt, min_score=0.5, judge=None)` — checks that the score assigned to the output using an LLM-as-a-Judge is higher than `min_score` and returns the score as `float`
-- `check_run_score(run, judge_prompt, min_score=0.5, judge=None)` — checks that the score assigned to the agent run using an LLM-as-a-Judge is higher than `min_score` and returns the score as `float`
+Checkers are the assertions of a tea test: each one inspects an agent run,
+records a pass or a fail, and returns its result so you can build on it.
+
+| Checker | Checks that | Returns |
+|---|---|---|
+| `check(label, condition)` | `condition` is truthy | `bool` |
+| `check_skill_used(run, skill)` | the agent used `skill` | `bool` |
+| `check_skill_not_used(run, skill)` | the agent did not use `skill` | `bool` |
+| `check_tool_used(run, tool)` | the agent called `tool` | `bool` |
+| `check_tool_not_used(run, tool)` | the agent did not call `tool` | `bool` |
+| `check_file_changed(run, file)` | `file` was created or modified | `bool` |
+| `check_file_not_changed(run, file)` | `file` was left untouched | `bool` |
+| `check_diff_added(run, file, code)` | `code` appears in `file`'s added lines | `bool` |
+| `check_diff_removed(run, file, code)` | `code` appears in `file`'s removed lines | `bool` |
+| `check_output_score(output_to_evaluate, judge_prompt, min_score=0.5, judge=None)` | the score assigned to the output using an LLM-as-a-Judge is higher than `min_score` | the score, as `float` |
+| `check_run_score(run, judge_prompt, min_score=0.5, judge=None)` | the score assigned to the agent run using an LLM-as-a-Judge is higher than `min_score` | the score, as `float` |
 
 ## Agents
 
@@ -148,8 +152,7 @@ Agents.Pi.with_model(PiConfig(
 your machine must be addressed as `http://host.docker.internal:<port>` — not
 `localhost`, which resolves to the container itself. Setting `base_url` makes
 tea declare `host_network_access`, which is what makes that name resolve; the
-address is still yours to write ([#52](https://github.com/rsn491/tea/issues/52)
-tracks moving the rewrite into the executor).
+address is still yours to write.
 
 ---
 
