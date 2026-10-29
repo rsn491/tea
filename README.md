@@ -9,7 +9,7 @@ Test and evaluation tool for agentic workflows. Run an agent against a task, ass
 ### Requirements
 
 - Python 3.11+
-- Docker
+- Docker (or [Colima](https://github.com/abiosoft/colima) on macOS)
 
 ### Install
 
@@ -81,6 +81,17 @@ tea examples/demo_calculator/agent-tests/test_add_new_operation.py::test_add_min
 ```
 
 See [examples/demo_calculator/agent-tests](examples/demo_calculator/agent-tests) for runnable examples.
+
+#### Colima on macOS
+
+[Colima](https://github.com/abiosoft/colima) is a free, faster alternative to
+Docker Desktop. Start it, then pass `--runtime colima` and tea finds its Docker
+socket via `colima status` (honouring `COLIMA_PROFILE`):
+
+```bash
+colima start --vm-type vz --mount-type virtiofs
+tea examples/demo_calculator/agent-tests --runtime colima -w 4
+```
 
 #### Metrics baselines
 

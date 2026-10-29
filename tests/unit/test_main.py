@@ -61,3 +61,37 @@ def test_main_threads_summary_export_and_baseline_into_run():
     _, kwargs = run_mock.call_args
     assert kwargs["summary_export"] == "out.json"
     assert kwargs["baseline"] == "base.json"
+
+
+def test_main_runtime_colima_points_docker_at_colima():
+    with (
+        patch("tea.main.run", return_value=True),
+        patch("tea.main.print_banner"),
+        patch("tea.main.Docker.use_colima") as use_colima,
+    ):
+        assert main(["some_target", "--runtime", "colima"]) == 0
+    use_colima.assert_called_once_with()
+
+
+def test_main_default_runtime_leaves_docker_alone():
+    with (
+        patch("tea.main.run", return_value=True),
+        patch("tea.main.print_banner"),
+        patch("tea.main.Docker.use_colima") as use_colima,
+    ):
+        assert main(["some_target"]) == 0
+    use_colima.assert_not_called()
+
+
+def test_main_runtime_colima_reports_error(capsys):
+    with (
+        patch("tea.main.run") as run,
+        patch("tea.main.print_banner"),
+        patch(
+            "tea.main.Docker.use_colima",
+            side_effect=RuntimeError("Colima is not running"),
+        ),
+    ):
+        assert main(["some_target", "--runtime", "colima"]) == 1
+    run.assert_not_called()
+    assert "tea: Colima is not running" in capsys.readouterr().out

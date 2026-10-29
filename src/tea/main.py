@@ -4,6 +4,7 @@ import argparse
 import sys
 from collections.abc import Sequence
 
+from tea.infra import Docker
 from tea.runner import run
 from tea.tui import print_banner
 from tea.tui.theme import set_mode
@@ -44,6 +45,13 @@ def build_parser() -> argparse.ArgumentParser:
         "(warn-only; does not affect exit code)",
     )
     parser.add_argument(
+        "--runtime",
+        choices=("docker", "colima"),
+        default="docker",
+        help="container runtime: the default Docker socket or a running Colima "
+        "instance (default: docker)",
+    )
+    parser.add_argument(
         "--theme",
         choices=("dark", "light"),
         default=None,
@@ -62,6 +70,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     set_mode(args.theme)
+    if args.runtime == "colima":
+        try:
+            Docker.use_colima()
+        except RuntimeError as e:
+            print(f"tea: {e}")
+            return 1
     print_banner()
     try:
         ok = run(

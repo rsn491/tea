@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Colima runtime
+
+`tea --runtime colima` runs agents on a running [Colima](https://github.com/abiosoft/colima)
+instance instead of the default Docker socket — a faster, free alternative to
+Docker Desktop on macOS. The socket is resolved via `colima status --json`.
+
 ### Harness-specific model configs
 
 `ModelConfig` was a three-field struct whose fields meant different things per

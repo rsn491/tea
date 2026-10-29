@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import io
+import json
+import subprocess
 import threading
 import time
 from dataclasses import dataclass, field
@@ -32,7 +34,8 @@ class DockerRunResult:
 class Docker:
     _singleton: ClassVar[Docker | None] = None
 
-    def __init__(self) -> None:
+    def __init__(self, base_url: str | None = None) -> None:
+        self._base_url = base_url
         self._shutdown = False
         self._containers: list = []
         self._lock = threading.Lock()
@@ -46,10 +49,15 @@ class Docker:
             Docker._singleton = Docker()
         return Docker._singleton
 
+    @staticmethod
+    def use_colima() -> None:
+        """Point the singleton at Colima's Docker socket instead of the default."""
+        Docker._singleton = Docker(base_url=colima_socket())
+
     # ── public ────────────────────────────────────────────────────────────────
 
     def create_image(self, tag: str, dockerfile: str) -> None:
-        client = docker.from_env()
+        client = self._client()
         try:
             client.images.get(tag)
             return
@@ -64,7 +72,7 @@ class Docker:
                     "Docker runner is shut down; cannot start new containers"
                 )
 
-        client = docker.from_env()
+        client = self._client()
         volume_binds = {
             host: {"bind": ctr, "mode": "rw"} for host, ctr in config.volumes.items()
         }
@@ -106,6 +114,11 @@ class Docker:
             stdout=stdout, stderr=stderr, exit_code=exit_code, duration_s=duration_s
         )
 
+    def _client(self) -> docker.DockerClient:
+        if self._base_url:
+            return docker.DockerClient(base_url=self._base_url)
+        return docker.from_env()
+
     def shutdown(self) -> None:
         """Prevent new containers from starting and kill every in-flight one."""
         with self._lock:
@@ -116,3 +129,36 @@ class Docker:
                 container.kill()
             except Exception:
                 pass
+
+
+def colima_socket() -> str:
+    """Return the Docker socket URL of the running Colima instance.
+
+    Asks Colima itself rather than guessing the path, so ``COLIMA_PROFILE``,
+    ``COLIMA_HOME`` and the XDG config fallback are all honoured.
+    """
+    try:
+        proc = subprocess.run(
+            ["colima", "status", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except FileNotFoundError:
+        raise RuntimeError(
+            "colima not found on PATH; install it with `brew install colima`"
+        ) from None
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("`colima status` timed out") from None
+    if proc.returncode != 0:
+        raise RuntimeError("Colima is not running; start it with `colima start`")
+    try:
+        sock = json.loads(proc.stdout).get("docker_socket")
+    except (json.JSONDecodeError, AttributeError):
+        sock = None
+    if not sock:
+        raise RuntimeError(
+            "Colima reports no Docker socket; "
+            "start it with `colima start --runtime docker`"
+        )
+    return sock if "://" in sock else f"unix://{sock}"
