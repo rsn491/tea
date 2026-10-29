@@ -93,6 +93,9 @@ colima start --vm-type vz --mount-type virtiofs
 tea examples/demo_calculator/agent-tests --runtime colima -w 4
 ```
 
+To compare per-run container cost on your machine (no API keys needed):
+`python scripts/bench_runtime.py` (`--help` for options).
+
 #### Metrics baselines
 
 Export per-test metrics (average token count, step count, duration, and success
