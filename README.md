@@ -1,5 +1,13 @@
 # tea - testing and evaluation for agents
 
+[![PyPI](https://img.shields.io/pypi/v/teaval)](https://pypi.org/project/teaval/)
+[![Python](https://img.shields.io/pypi/pyversions/teaval)](https://pypi.org/project/teaval/)
+[![CI](https://github.com/rsn491/tea/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/rsn491/tea/actions/workflows/ci.yml)
+[![Agent tests](https://github.com/rsn491/tea/actions/workflows/agent-tests.yml/badge.svg?branch=main)](https://github.com/rsn491/tea/actions/workflows/agent-tests.yml)
+[![codecov](https://codecov.io/gh/rsn491/tea/branch/main/graph/badge.svg)](https://codecov.io/gh/rsn491/tea)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 Test and evaluation tool for agentic workflows. Run an agent against a task, assert what it did and measure how it performed.
 
 ![Demo output](docs/demo_output.png)
