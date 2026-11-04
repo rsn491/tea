@@ -41,6 +41,7 @@ src/tea/
 tests/unit/         # no Docker, no API keys — always runnable
 tests/integration/  # require Docker + CLAUDE_CODE_OAUTH_TOKEN
 examples/           # runnable example tests
+benchmarks/         # black-box timing setup (hyperfine + mock LLM), see its README
 ```
 
 ## Architecture

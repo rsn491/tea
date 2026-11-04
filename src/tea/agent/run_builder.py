@@ -4,7 +4,10 @@ import difflib
 import logging
 import os
 import shutil
+import subprocess
+import sys
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from typing import Protocol
 
 from tea._context import _active_collector
@@ -13,6 +16,14 @@ from tea.tui.metrics import print_metrics
 from .agent_run import AgentRun, FileChange, FileDiff
 
 _log = logging.getLogger(__name__)
+
+# Deleting the workdir copy is pure cleanup, so it runs off the critical path.
+# Worker threads are non-daemon: pending deletions finish before the process
+# exits.
+_cleanup_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="tea-cleanup")
+
+# (size, mtime_ns, ctime_ns, inode) — any write to a file changes ctime.
+_FileStat = tuple[int, int, int, int]
 
 
 class _Runnable(Protocol):
@@ -66,19 +77,19 @@ class RunBuilder:
     def run(self) -> AgentRun:
         tmp_dir: str | None = None
         if self._workdir:
-            tmp_dir = tempfile.mkdtemp()
-            # symlinks=False (the default) dereferences symlinks so symlinked
-            # skill bundles land in the tmp copy as real files. Required for
-            # the bind mount, since symlink targets outside the workdir would
-            # be unreachable inside the container.
-            shutil.copytree(self._workdir, tmp_dir, dirs_exist_ok=True)
+            tmp_dir = tempfile.mkdtemp(prefix="tea-")
+            try:
+                _copy_workdir(self._workdir, tmp_dir)
+            except BaseException:
+                shutil.rmtree(tmp_dir, ignore_errors=True)
+                raise
         effective_workdir = tmp_dir if tmp_dir else self._workdir
         sources = _resolve_skill_sources(
             self._skills_sources, self._defaults, effective_workdir
         )
         skills, source_for = _discover_skills(sources, effective_workdir)
         try:
-            before = _snapshot(self._workdir)
+            before_stats = _stat_tree(tmp_dir)
             result = self._runner._execute(
                 self._text,
                 timeout=self._timeout,
@@ -86,11 +97,13 @@ class RunBuilder:
                 skills=skills,
                 source_for=source_for,
             )
-            after = _snapshot(effective_workdir)
+            before, after = _changed_contents(
+                self._workdir, tmp_dir, before_stats, _stat_tree(tmp_dir)
+            )
             result._files_changed_fn = lambda: _diff_snapshots(before, after)
         finally:
             if tmp_dir:
-                shutil.rmtree(tmp_dir, ignore_errors=True)
+                _cleanup_pool.submit(shutil.rmtree, tmp_dir, ignore_errors=True)
 
         collector = _active_collector.get(None)
         if collector is not None:
@@ -173,21 +186,119 @@ def _discover_skills(
     return skills, source_for
 
 
-def _snapshot(path: str | None) -> dict[str, str]:
+def _copy_workdir(src: str, dst: str) -> None:
+    """Copy ``src``'s contents into the existing directory ``dst``.
+
+    Symlinks are dereferenced so symlinked skill bundles land in the copy as
+    real files — required for the bind mount, since symlink targets outside
+    the workdir would be unreachable inside the container.
+
+    On Linux, GNU ``cp`` is used: it avoids per-file Python overhead and, on
+    copy-on-write filesystems (btrfs, XFS), ``--reflink=auto`` makes the copy
+    near-instant. Anything else falls back to ``shutil.copytree``.
+    """
+    if sys.platform.startswith("linux"):
+        try:
+            subprocess.run(
+                [
+                    "cp",
+                    "-R",
+                    "-L",
+                    "--preserve=mode,timestamps",
+                    "--reflink=auto",
+                    "--",
+                    os.path.join(src, "."),
+                    dst,
+                ],
+                check=True,
+                capture_output=True,
+            )
+            return
+        except (OSError, subprocess.CalledProcessError) as e:
+            stderr = getattr(e, "stderr", b"") or b""
+            _log.debug(
+                "cp failed (%s), falling back to shutil.copytree",
+                stderr.decode(errors="replace").strip() or e,
+            )
+            # Drop any partial copy before retrying.
+            shutil.rmtree(dst, ignore_errors=True)
+            os.makedirs(dst, exist_ok=True)
+    shutil.copytree(src, dst, symlinks=False, dirs_exist_ok=True)
+
+
+def _stat_tree(path: str | None) -> dict[str, _FileStat]:
+    """Stat every file under ``path``, skipping hidden directories.
+
+    Only metadata is read, so this stays cheap even for large workdirs.
+    """
     if not path:
         return {}
-    snapshot: dict[str, str] = {}
+    stats: dict[str, _FileStat] = {}
     for root, dirs, files in os.walk(path):
         dirs[:] = [d for d in dirs if not d.startswith(".")]
         for fname in files:
             abs_path = os.path.join(root, fname)
-            rel_path = os.path.relpath(abs_path, path)
             try:
-                with open(abs_path, encoding="utf-8", errors="replace") as fh:
-                    snapshot[rel_path] = fh.read()
+                st = os.stat(abs_path)
             except OSError:
-                pass
-    return snapshot
+                continue
+            stats[os.path.relpath(abs_path, path)] = (
+                st.st_size,
+                st.st_mtime_ns,
+                st.st_ctime_ns,
+                st.st_ino,
+            )
+    return stats
+
+
+def _has_subsecond_timestamps(stats: dict[str, _FileStat]) -> bool:
+    """True when the filesystem records sub-second ctimes.
+
+    On a coarse (1 s) filesystem, a same-size rewrite within the second of the
+    copy would leave every stat field unchanged, so stats can't be trusted.
+    """
+    return any(ctime_ns % 1_000_000_000 for _, _, ctime_ns, _ in stats.values())
+
+
+def _changed_contents(
+    original: str | None,
+    copy: str | None,
+    before_stats: dict[str, _FileStat],
+    after_stats: dict[str, _FileStat],
+) -> tuple[dict[str, str], dict[str, str]]:
+    """Read before/after text for files the run may have touched.
+
+    The agent writes only to ``copy``; ``original`` is never mounted, so it
+    still holds the pre-run contents. Only files whose stat changed (or that
+    were added/removed) are read. If timestamps are too coarse to trust,
+    every file is read and ``_diff_snapshots`` filters out identical ones.
+    """
+    if not original or not copy:
+        return {}, {}
+    paths = before_stats.keys() | after_stats.keys()
+    if _has_subsecond_timestamps(before_stats):
+        paths = {p for p in paths if before_stats.get(p) != after_stats.get(p)}
+    before = {
+        p: text
+        for p in paths
+        if p in before_stats and (text := _read_text(original, p)) is not None
+    }
+    after = {
+        p: text
+        for p in paths
+        if p in after_stats and (text := _read_text(copy, p)) is not None
+    }
+    return before, after
+
+
+def _read_text(root: str, rel_path: str) -> str | None:
+    try:
+        with open(
+            os.path.join(root, rel_path), encoding="utf-8", errors="replace"
+        ) as fh:
+            return fh.read()
+    except OSError:
+        return None
 
 
 def _diff_snapshots(

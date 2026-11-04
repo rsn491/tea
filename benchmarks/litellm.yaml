@@ -1,0 +1,8 @@
+# Mock OpenAI-compatible endpoint for black-box benchmarking of tea.
+# Every request to model "bench" returns the canned reply below instantly,
+# so wall-clock time measures tea's own overhead rather than LLM latency.
+model_list:
+  - model_name: bench
+    litellm_params:
+      model: openai/bench
+      mock_response: "hello world"

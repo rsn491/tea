@@ -81,3 +81,47 @@ def test_shared_returns_singleton_when_no_context(mock_docker_module):
     a = Docker.get()
     b = Docker.get()
     assert a is b
+
+
+@patch("tea.infra.docker.docker")
+def test_client_is_reused_across_runs_and_image_checks(mock_docker_module):
+    client = mock_docker_module.from_env.return_value
+    client.containers.run.side_effect = lambda *a, **k: _make_container()
+    runner = Docker()
+
+    config = DockerRunConfig(image="node:22", command=["echo", "hi"])
+    runner.create_image("node:22", "FROM node:22\n")
+    runner.run(config)
+    runner.run(config)
+
+    assert mock_docker_module.from_env.call_count == 1
+
+
+@patch("tea.infra.docker.docker")
+def test_create_image_checks_each_tag_once(mock_docker_module):
+    client = mock_docker_module.from_env.return_value
+    runner = Docker()
+
+    runner.create_image("tea:1", "FROM node:22\n")
+    runner.create_image("tea:1", "FROM node:22\n")
+    runner.create_image("tea:2", "FROM node:22\n")
+
+    assert [c.args[0] for c in client.images.get.call_args_list] == ["tea:1", "tea:2"]
+    client.images.build.assert_not_called()
+
+
+@patch("tea.infra.docker.docker")
+def test_create_image_builds_missing_tag_once(mock_docker_module):
+    class ImageNotFound(Exception):
+        pass
+
+    mock_docker_module.errors.ImageNotFound = ImageNotFound
+    client = mock_docker_module.from_env.return_value
+    client.images.get.side_effect = ImageNotFound
+    runner = Docker()
+
+    runner.create_image("tea:1", "FROM node:22\n")
+    runner.create_image("tea:1", "FROM node:22\n")
+
+    client.images.build.assert_called_once()
+    assert client.images.build.call_args.kwargs["tag"] == "tea:1"

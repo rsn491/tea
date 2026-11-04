@@ -36,6 +36,13 @@ class Docker:
         self._shutdown = False
         self._containers: list = []
         self._lock = threading.Lock()
+        # One client per thread, reused across runs. Creating a client costs
+        # a fresh connection plus a GET /version round-trip to the daemon.
+        # Per-thread rather than shared so concurrent runs never contend for
+        # (or overflow) a single client's connection pool.
+        self._local = threading.local()
+        # Image tags confirmed present (or built) during this process.
+        self._known_images: set[str] = set()
 
     # ── singleton ─────────────────────────────────────────────────────────────
 
@@ -49,13 +56,18 @@ class Docker:
     # ── public ────────────────────────────────────────────────────────────────
 
     def create_image(self, tag: str, dockerfile: str) -> None:
-        client = docker.from_env()
+        with self._lock:
+            if tag in self._known_images:
+                return
+        client = self._client()
         try:
             client.images.get(tag)
-            return
         except docker.errors.ImageNotFound:
-            pass
-        client.images.build(fileobj=io.BytesIO(dockerfile.encode()), tag=tag, rm=True)
+            client.images.build(
+                fileobj=io.BytesIO(dockerfile.encode()), tag=tag, rm=True
+            )
+        with self._lock:
+            self._known_images.add(tag)
 
     def run(self, config: DockerRunConfig) -> DockerRunResult:
         with self._lock:
@@ -64,7 +76,7 @@ class Docker:
                     "Docker runner is shut down; cannot start new containers"
                 )
 
-        client = docker.from_env()
+        client = self._client()
         volume_binds = {
             host: {"bind": ctr, "mode": "rw"} for host, ctr in config.volumes.items()
         }
@@ -105,6 +117,15 @@ class Docker:
         return DockerRunResult(
             stdout=stdout, stderr=stderr, exit_code=exit_code, duration_s=duration_s
         )
+
+    # ── internals ─────────────────────────────────────────────────────────────
+
+    def _client(self) -> docker.DockerClient:
+        client = getattr(self._local, "client", None)
+        if client is None:
+            client = docker.from_env()
+            self._local.client = client
+        return client
 
     def shutdown(self) -> None:
         """Prevent new containers from starting and kill every in-flight one."""
